@@ -19,7 +19,7 @@ async def main():
   bot = Stabilibot(command_prefix="!")
 
   await bot.add_cog(LogMessages(bot))
-  await bot.run(os.environ.get("TOKEN"))
+  bot.run(os.environ.get("TOKEN"))
 
 if __name__ == "__main__":
   asyncio.run(main())

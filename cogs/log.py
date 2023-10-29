@@ -11,6 +11,5 @@ class LogMessages(commands.Cog):
 
   @commands.Cog.listener()
   async def on_message(self, message):
-    if is_message_in_channels(message, self.channels):
-      print('{} => [{}] {} ({}): {}'.format(message.channel.name, datetime.now(), message.author, message.author.display_name, message.content), flush=True)
+    print('{} => [{}] {} ({}): {}'.format(message.channel.name, datetime.now(), message.author, message.author.display_name, message.content), flush=True)
       
