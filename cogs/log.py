@@ -6,10 +6,8 @@ class LogMessages(commands.Cog):
   def __init__(self, bot):
     self.bot = bot
 
-    # channel name
-    self.channels = [ "bot-testing", "staff" ]
-
   @commands.Cog.listener()
   async def on_message(self, message):
-    print('{} => [{}] {} ({}): {}'.format(message.channel.name, datetime.now(), message.author, message.author.display_name, message.content), flush=True)
+    if hasattr(message.channel, "name"):
+      print('{} => [{}] {} ({}): {}'.format(message.channel.name, datetime.now(), message.author, message.author.display_name, message.content), flush=True)
       

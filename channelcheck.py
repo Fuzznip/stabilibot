@@ -1,5 +1,3 @@
-from discord.ext import commands
-
 def is_channel(channel1, channel2) -> bool:
   return channel1.casefold() == channel2.casefold()
 
