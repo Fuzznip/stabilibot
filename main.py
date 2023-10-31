@@ -11,6 +11,7 @@ import os
 
 from cogs.log import LogMessages
 from cogs.gear import GearCommand
+from cogs.nick import NicknameCommand
 
 class Stabilibot(commands.Bot):
   def __init__(self, command_prefix):
@@ -57,6 +58,7 @@ async def main():
 
   await bot.add_cog(LogMessages(bot))
   await bot.add_cog(GearCommand(bot))
+  await bot.add_cog(NicknameCommand(bot))
   bot.run(os.environ.get("TOKEN"))
 
 if __name__ == "__main__":
