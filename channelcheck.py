@@ -1,4 +1,4 @@
-def is_channel(channel1, channel2) -> bool:
+def is_channel(channel1: str, channel2: str) -> bool:
   return channel1.casefold() == channel2.casefold()
 
 def is_message_in_channel(message, channel: str) -> bool:

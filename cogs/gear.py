@@ -26,7 +26,7 @@ class GearCommand(commands.Cog):
   def __init__(self, bot):
     self.bot = bot
 
-  @app_commands.command(name="gear", description="minimum gear setup selector")
+  @app_commands.command(name = "gear", description = "minimum gear setup selector")
   async def gear(self, interaction: discord.Interaction) -> None:
     embed = discord.Embed(title = "Select Content")
     await interaction.response.send_message(embed = embed, view = GearButtons(), ephemeral = True)

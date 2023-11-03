@@ -6,7 +6,7 @@ class NicknameCommand(commands.Cog):
   def __init__(self, bot):
     self.bot = bot
 
-  @app_commands.command(name="ign", description="sets your osrs name and any alts")
+  @app_commands.command(name = "ign", description = "sets your osrs name and any alts")
   async def ign(self, interaction: discord.Interaction, main: str, alt: str = None) -> None:
     s = f"{main}"
     if alt != None:
