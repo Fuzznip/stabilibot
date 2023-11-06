@@ -1,6 +1,9 @@
 from discord.ext import commands
 from discord import app_commands
 import discord
+from dotenv import load_dotenv
+load_dotenv()
+import os
 
 class PublishButton(discord.ui.Button):
   def __init__(self, embed, destination):
@@ -30,7 +33,7 @@ class Announce(commands.Cog):
   def __init__(self, bot):
     self.bot = bot
 
-    self.channel = 1169375578915348551 # test-announcements channel id
+    self.channel = int(os.environ.get("ANNOUNCEMENTS_CHANNEL")) # test-announcements channel id
 
   @app_commands.command(name = "announce", description = "Queues up an announcement to #announcements")
   async def announce(self, interaction: discord.Interaction, body: str, details: str = None, title: str = None) -> None:
