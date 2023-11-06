@@ -18,10 +18,10 @@ class Stabilibot(commands.Bot):
   def __init__(self, command_prefix):
     intents = discord.Intents.all()
     intents.message_content = True
-    super().__init__(command_prefix=command_prefix, intents=intents)
+    super().__init__(command_prefix = command_prefix, intents = intents)
 
 async def main():
-  bot = Stabilibot(command_prefix="!")
+  bot = Stabilibot(command_prefix = "!")
 
   # from https://gist.github.com/AbstractUmbra/a9c188797ae194e592efe05fa129c57f
   @bot.command()
