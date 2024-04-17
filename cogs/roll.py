@@ -11,11 +11,11 @@ import random
 class RollCommand(commands.Cog):
   def __init__(self, bot):
     self.bot = bot
-    
+
   @app_commands.command(name = "roll", description = "roll dice!")
-  async def roll(self, interaction: discord.Interaction, rollString: str = "1d20") -> None:
+  async def roll(self, interaction: discord.Interaction, rollstring: str = "1d20") -> None:
     try:
-      num_dice, num_faces = map(int, rollString.split("d"))
+      num_dice, num_faces = map(int, rollstring.split("d"))
     except:
       await interaction.channel.send("Invalid roll format. Use the format `1d20`")
       return
@@ -39,3 +39,4 @@ class RollCommand(commands.Cog):
     rolls = [random.randint(1, num_faces) for _ in range(num_dice)]
     await interaction.channel.send(f"Rolling {num_dice}d{num_faces}: {', '.join(map(str, rolls))} = {sum(rolls)}")
 
+ 
