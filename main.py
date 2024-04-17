@@ -12,7 +12,7 @@ import os
 from cogs.log import LogMessages
 from cogs.gear import GearCommand
 from cogs.nick import NicknameCommand
-from cogs.announce import Announce
+from cogs.roll import RollCommand
 
 class Stabilibot(commands.Bot):
   def __init__(self, command_prefix):
@@ -60,7 +60,7 @@ async def main():
   await bot.add_cog(LogMessages(bot))
   await bot.add_cog(GearCommand(bot))
   await bot.add_cog(NicknameCommand(bot))
-  await bot.add_cog(Announce(bot))
+  await bot.add_cog(RollCommand(bot))
   bot.run(os.environ.get("TOKEN"))
 
 if __name__ == "__main__":
