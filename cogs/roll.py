@@ -37,6 +37,9 @@ class RollCommand(commands.Cog):
       return
     
     rolls = [random.randint(1, num_faces) for _ in range(num_dice)]
-    await interaction.response.send_message(f"Rolling {num_dice}d{num_faces}: {', '.join(map(str, rolls))} = {sum(rolls)}")
+    if num_dice == 1:
+      await interaction.response.send_message(f"Rolling {num_dice}d{num_faces}: {rolls[0]}")
+    else:
+      await interaction.response.send_message(f"Rolling {num_dice}d{num_faces}: {', '.join(map(str, rolls))} = {sum(rolls)}")
 
  
