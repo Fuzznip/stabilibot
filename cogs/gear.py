@@ -12,7 +12,8 @@ class GearButton(discord.ui.Button):
     embed = discord.Embed()
     embed.set_image(url = self.image)
     embed.title = self.label
-    await interaction.response.send_message(embed = embed, ephemeral = False)
+    await interaction.response.defer()
+    await interaction.channel.send(embed = embed)
 
 class GearButtons(discord.ui.View):
   def __init__(self):
