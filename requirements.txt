@@ -1,3 +1,4 @@
-git+https://github.com/Rapptz/discord.py
+discord.py==2.4.0a4955+ga5d03d4a
 nest_asyncio==1.5.8
-python-dotenv==1.0.0
+python-dotenv==1.0.1
+wom.py==0.9.5
