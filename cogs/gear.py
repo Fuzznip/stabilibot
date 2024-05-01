@@ -1,6 +1,9 @@
 from discord.ext import commands
-from discord import app_commands
 import discord
+
+from dotenv import load_dotenv
+load_dotenv()
+import os
 
 class GearButton(discord.ui.Button):
   def __init__(self, style, label, image):
@@ -23,11 +26,11 @@ class GearButtons(discord.ui.View):
     self.add_item(GearButton(label = "ToB", style = discord.ButtonStyle.red, image = "https://i.imgur.com/CLkzg2T.png"))
     self.add_item(GearButton(label = "ToA", style = discord.ButtonStyle.grey, image = "https://i.imgur.com/2xIc7sO.png"))
 
-class GearCommand(commands.Cog):
+class Gear(commands.Cog):
   def __init__(self, bot):
     self.bot = bot
 
-  @app_commands.command(name = "gear", description = "minimum gear setup selector")
-  async def gear(self, interaction: discord.Interaction) -> None:
+  @discord.slash_command(name = "gear", description = "minimum gear setup selector", guild_ids = [int(os.getenv("GUILD_ID"))])
+  async def gear(self, interaction) -> None:
     embed = discord.Embed(title = "Select Content")
     await interaction.response.send_message(embed = embed, view = GearButtons(), ephemeral = True)
