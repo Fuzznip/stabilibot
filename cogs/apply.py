@@ -7,7 +7,7 @@ load_dotenv()
 import os
 
 import wom
-from wom import Skills, ComputedMetrics
+from wom import Skills
 
 class ApplicationForm(ui.Modal, title = "Application Form"):
   def __init__(self, bot: commands.Bot, interaction: discord.Interaction):
@@ -21,16 +21,18 @@ class ApplicationForm(ui.Modal, title = "Application Form"):
       womClient = wom.Client(user_agent = "Stabilibot")
       await womClient.start()
       # get the first snapshot of the player
-      result = await womClient.players.get_snapshots(username = self.osrsName.value)
+      result = await womClient.players.update_player(username = self.osrsName.value)
       if result.is_ok:
-        snapshots = result.unwrap()
-        if len(snapshots) == 0:
-          await interaction.response.send_message("Error fetching player data - double check the spelling of your OSRS username and then contact Staff if issue persists.", ephemeral = True)
+        playerDetail = result.unwrap()
+        snapshot = playerDetail.latest_snapshot
+        if playerDetail.latest_snapshot is None:
+          errorMessage = "Cannot find latest snapshot for player. Please try again later."
+          await interaction.response.send_message(errorMessage, ephemeral = True)
+          print(errorMessage)
           await womClient.close()
           return
-        snapshot = snapshots[0]
         totalLevel = snapshot.data.skills[Skills("overall")].level
-        ehb = snapshot.data.computed[ComputedMetrics("ehb")].value
+        ehb = playerDetail.player.ehb
 
         # Create an embed with the title as the username
         embed = discord.Embed(title = self.osrsName.value)
@@ -46,9 +48,10 @@ class ApplicationForm(ui.Modal, title = "Application Form"):
 
         # Get the env APPLICATION_OUTPUT_CHANNEL
         channel = self.bot.get_channel(int(os.getenv("APPLICATION_OUTPUT_CHANNEL_ID")))
-      
+
         # submit the embed to the APPLICATION_OUTPUT_CHANNEL
         await channel.send(embed = embed)
+
         # Remove the "Applicant" role from the user if they have it
         role = discord.utils.get(interaction.guild.roles, name = "Applicant")
         if role in interaction.user.roles:
