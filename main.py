@@ -12,6 +12,7 @@ client = discord.Client(intents = intents)
 
 from cogs.apply import Apply
 from cogs.gear import Gear
+from cogs.submit import Submit
 
 class Stabilibot(commands.Bot):
   def __init__(self):
@@ -28,4 +29,5 @@ class Stabilibot(commands.Bot):
 bot = Stabilibot()
 bot.add_cog(Apply(bot))
 bot.add_cog(Gear(bot))
+bot.add_cog(Submit(bot))
 bot.run(os.getenv("TOKEN"))
