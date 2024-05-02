@@ -1,3 +1,4 @@
+aiohttp==3.9.5
 brotli==1.1.0
 ConfigParser==7.0.0
 cryptography==42.0.5
@@ -15,6 +16,8 @@ mypy_extensions==1.0.0
 numpy==1.26.4
 ordereddict==1.1
 protobuf==5.26.1
+psycopg==3.1.18
+psycopg_pool==3.2.1
 pyOpenSSL==24.1.0
 python-dotenv==1.0.1
 pywin32==306

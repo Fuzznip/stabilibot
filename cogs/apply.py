@@ -9,6 +9,8 @@ import os
 import wom
 from wom import Skills
 
+import utils.db as db
+
 class ApplicationModal(ui.Modal):
   def __init__(self, bot: commands.Bot, interaction: discord.Interaction):
     super().__init__(title = self.modalTitle, timeout = None, custom_id = "application_form")
@@ -75,6 +77,9 @@ class ApplicationModal(ui.Modal):
           await interaction.user.edit(nick = self.questionOsrsName.value)
         except discord.errors.Forbidden:
           print("Bot does not have permission to change nickname for user: {}".format(interaction.user.display_name))
+
+        # Link the user's OSRS username to their discord account
+        await db.add_user(str(interaction.user.id), self.questionOsrsName.value)
 
         await interaction.response.send_message("Application submitted!", ephemeral = True)
       else:
