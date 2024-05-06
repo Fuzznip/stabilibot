@@ -23,11 +23,15 @@ class AddPlayer(commands.Cog):
       return
     
     # Give the player the role of the team
-    discordId = db.get_user_from_username(user)
-    guild = self.bot.get_guild(int(os.getenv("GUILD_ID")))
-    role = discord.utils.get(guild.roles, name = team_name)
-    member = await guild.fetch_member(int(discordId))
-    await member.add_roles(role)
+    try:
+      discordId = db.get_user_from_username(user)
+      guild = self.bot.get_guild(int(os.getenv("GUILD_ID")))
+      role = discord.utils.get(guild.roles, name = team_name)
+      member = await guild.fetch_member(int(discordId))
+      await member.add_roles(role)
+    except AttributeError:
+      await interaction.response.send_message(f"Failed to add role to player. Role \"{role}\" does not exist.", ephemeral = True)
+      return
     await interaction.response.send_message(f"Successfully added { user } to team { team_name }!", ephemeral = True)
 
 class RemovePlayer(commands.Cog):
