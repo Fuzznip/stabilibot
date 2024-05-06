@@ -16,11 +16,15 @@ class Unlink(commands.Cog):
   async def unlink(self, interaction, username: str):
     success = await db.remove_user(str(interaction.author.id), username)
     
-    if not success:
-      await interaction.response.send_message("Failed to unlink the account. {} was not linked to your discord account.".format(username), ephemeral = True)
-      return
-    
     usernames = db.get_user(str(interaction.author.id))
+
+    if not success:
+      if usernames:
+        await interaction.response.send_message(f"Failed to unlink the account. {username} was not linked to your discord account. Your linked accounts are: {', '.join(usernames)}", ephemeral = True)
+        return
+      else:
+        await interaction.response.send_message(f"Failed to unlink the account. {username} was not linked to your discord account. You have no linked accounts.", ephemeral = True)
+        return
 
     # if usernames is not empty
     if usernames:
