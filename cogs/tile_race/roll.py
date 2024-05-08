@@ -9,6 +9,8 @@ import utils.db as db
 
 import random
 
+PASSED_START_STAR_COUNT = 3
+
 class Roll(commands.Cog):
   def __init__(self, bot):
     self.bot = bot
@@ -32,10 +34,16 @@ class Roll(commands.Cog):
     roll = random.randint(1, 4)
 
     # Move the team forward
-    db.move_team(team, roll)
+    if db.move_team(team, roll, 20):
+      # Add stars to the team
+      db.add_stars(team, PASSED_START_STAR_COUNT)
 
-    await interaction.response.send_message(f"{ team } rolled a { roll }! { team } is now on tile { db.get_team_tile(team) }", ephemeral = False)
-    
+      # Get star count
+      stars = db.get_star_count(team)
+      await interaction.response.send_message(f"{ team } rolled a { roll }. They have looped to the beginning, gained {PASSED_START_STAR_COUNT} stars, and are now on tile { db.get_team_tile(team) + 1 } with { stars } stars!!", ephemeral = False)
+    else:
+      await interaction.response.send_message(f"{ team } rolled a { roll }! { team } is now on tile { db.get_team_tile(team) + 1 }", ephemeral = False)    
+
 class RollTeam(commands.Cog):
   def __init__(self, bot):
     self.bot = bot
@@ -53,7 +61,12 @@ class RollTeam(commands.Cog):
     roll = random.randint(1, 4)
 
     # Move the team forward
-    db.move_team(team_name, roll)
+    if db.move_team(team_name, roll, 20):
+      # Add stars to the team
+      db.add_stars(team_name, PASSED_START_STAR_COUNT)
 
-    await interaction.response.send_message(f"{team_name} rolled a {roll}! {team_name} is now on tile {db.get_team_tile(team_name)}", ephemeral=False)
-
+      # Get star count
+      stars = db.get_star_count(team_name)
+      await interaction.response.send_message(f"{ team_name } rolled a { roll }. They have looped to the beginning, gained {PASSED_START_STAR_COUNT} stars, and are now on tile { db.get_team_tile(team_name) + 1 } with { stars } stars!", ephemeral = False)
+    else:
+      await interaction.response.send_message(f"{ team_name } rolled a { roll }! { team_name } is now on tile { db.get_team_tile(team_name) + 1 }", ephemeral = False)  

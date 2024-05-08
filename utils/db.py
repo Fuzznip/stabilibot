@@ -16,6 +16,9 @@ def create_table():
       conn.commit()
 
 async def add_user(discordId, username):
+  # first, lowercase the username
+  username = username.lower()
+
   success = False
 
   # check if the username is a valid RuneScape username
@@ -59,6 +62,9 @@ async def add_user(discordId, username):
   return success
 
 async def remove_user(discordId, username):
+  # first, lowercase the username
+  username = username.lower()
+
   success = False
   with dbpool.connection() as conn:
     with conn.cursor() as cur:
@@ -101,8 +107,27 @@ def get_user_from_username(username):
 def ensure_teams_table():
   with dbpool.connection() as conn:
     with conn.cursor() as cur:
-      # Create the table with team, tile, array of discord ids, and ready boolean
-      cur.execute("CREATE TABLE IF NOT EXISTS teams (team text PRIMARY KEY, tile int, discord_ids text[], ready boolean, stars int DEFAULT 0, coins int DEFAULT 0, last_roll_time timestamp DEFAULT now())")
+      # Create the teams table
+      # team: the name of the team
+      # tile: the current tile the team is on
+      # discord_ids: the discord ids of the users on the team
+      # items: the items the team has
+      # ready: whether the team is ready to roll
+      # stars: the number of stars the team has
+      # coins: the number of coins the team has
+      # tile_progress: the progress the team has made on various tiles
+      # last_roll_time: the time the team last rolled
+      cur.execute("""CREATE TABLE IF NOT EXISTS teams (
+                  team text PRIMARY KEY, 
+                  tile int, 
+                  discord_ids text[], 
+                  items text[], 
+                  ready boolean, 
+                  stars int DEFAULT 0, 
+                  coins int DEFAULT 0, 
+                  tile_progress jsonb DEFAULT '{}'::jsonb,
+                  side_progress jsonb DEFAULT '{}'::jsonb,
+                  last_roll_time timestamp DEFAULT now())""")
       conn.commit()
 
 def get_teams():
@@ -123,7 +148,29 @@ def create_team(team):
         return success
 
       # If the team doesn't exist, add it to the table
-      cur.execute("INSERT INTO teams (team, tile, discord_ids, ready, stars, coins, last_roll_time) VALUES (%s, 0, '{}', true, 0, 0, now())", (team, ))
+      cur.execute("""INSERT INTO teams (
+                  team, 
+                  tile, 
+                  discord_ids, 
+                  items, 
+                  ready, 
+                  stars, 
+                  coins, 
+                  tile_progress,
+                  side_progress,
+                  last_roll_time
+                  ) VALUES (
+                  %s, 
+                  -1, 
+                  '{}', 
+                  '{}', 
+                  true, 
+                  0, 
+                  0, 
+                  '{}'::jsonb,
+                  '{}'::jsonb,
+                  now()
+                  )""", (team, ))
       conn.commit()
       success = True
 
@@ -212,19 +259,19 @@ def is_team_ready(team):
       value = cur.fetchone()
       return value[0] if value is not None else None
     
-def move_team(team, roll):
+def move_team(team, roll, max_tile = 20):
   with dbpool.connection() as conn:
     with conn.cursor() as cur:
-      # Get tile count
-      tile_count = 21
+      looped = False
 
       # Check if the team has reached the end
       cur.execute("SELECT tile FROM teams WHERE team = %s", (team, ))
       value = cur.fetchone()
       
-      if value[0] + roll >= tile_count:
+      if value[0] + roll >= max_tile:
         # Loop back to the beginning
-        cur.execute("UPDATE teams SET tile = %s WHERE team = %s", (value[0] + roll - tile_count, team))
+        cur.execute("UPDATE teams SET tile = %s WHERE team = %s", (value[0] + roll - max_tile, team))
+        looped = True
       else:
         # Move the team forward
         cur.execute("UPDATE teams SET tile = tile + %s WHERE team = %s", (roll, team))
@@ -232,7 +279,9 @@ def move_team(team, roll):
       # Set the team to not ready and last roll time to now
       cur.execute("UPDATE teams SET ready = false, last_roll_time = now() WHERE team = %s", (team, ))
       conn.commit()
-        
+
+      return looped
+
 def get_team_tile(team):
   with dbpool.connection() as conn:
     with conn.cursor() as cur:
@@ -254,6 +303,14 @@ def complete_tile(team):
       cur.execute("UPDATE teams SET ready = true WHERE team = %s", (team, ))
       conn.commit()
 
+def get_star_count(team):
+  with dbpool.connection() as conn:
+    with conn.cursor() as cur:
+      # Get the team from the table
+      cur.execute("SELECT stars FROM teams WHERE team = %s", (team, ))
+      value = cur.fetchone()
+      return value[0] if value is not None else None
+
 def add_star(team):
   with dbpool.connection() as conn:
     with conn.cursor() as cur:
@@ -261,11 +318,25 @@ def add_star(team):
       cur.execute("UPDATE teams SET stars = stars + 1 WHERE team = %s", (team, ))
       conn.commit()
 
+def add_stars(team, count):
+  with dbpool.connection() as conn:
+    with conn.cursor() as cur:
+      # Add stars to the team
+      cur.execute("UPDATE teams SET stars = stars + %s WHERE team = %s", (count, team))
+      conn.commit()
+
 def set_stars(team, stars):
   with dbpool.connection() as conn:
     with conn.cursor() as cur:
       # Set the stars for the team
       cur.execute("UPDATE teams SET stars = %s WHERE team = %s", (stars, team))
+      conn.commit()
+
+def add_coins(team, coins):
+  with dbpool.connection() as conn:
+    with conn.cursor() as cur:
+      # Add coins to the team
+      cur.execute("UPDATE teams SET coins = coins + %s WHERE team = %s", (coins, team))
       conn.commit()
 
 def set_coins(team, coins):

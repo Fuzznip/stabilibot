@@ -47,7 +47,7 @@ class AddCoins(commands.Cog):
 
     # Get the current coin count of the team
     current_coins = db.get_coin_count(team_name)
-
+    got_star = False
     # If the addition of coins would reach the cap of 10 coins, convert 10 coins to 1 star
     if current_coins + coins >= 10:
       coins_to_add = coins
