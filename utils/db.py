@@ -28,9 +28,11 @@ async def add_user(discordId, username):
     await womClient.start()
     # get the first snapshot of the player
     result = await womClient.players.update_player(username = username)
+    # Check if error is http response 429 (rate limited)
     if not result.is_ok:
-      await womClient.close()
-      return success
+      if result.status != 429: # rate limiting is fine we just want to check if the username is valid
+        await womClient.close()
+        return success
     await womClient.close()
   except:
     await womClient.close()
@@ -49,7 +51,7 @@ async def add_user(discordId, username):
       val = cur.fetchone()
       if val is None:
         # If the user doesn't exist, add them to the table
-        cur.execute("INSERT INTO users (discord_id, username) VALUES (%s, %s)", (discordId, username))
+        cur.execute("INSERT INTO users (discord_id, username) VALUES (%s, %s)", (discordId, [username]))
       else:
         # Check if the username is already in the array
         if username in val[1]:
