@@ -9,6 +9,9 @@ import random
 
 import utils.db as db
 
+DEFAULT_ROLL_SIZE = 4
+DEFAULT_ROLL_MODIFIER = 0
+
 class TeamTargeter(discord.ui.Select):
   def __init__(self, my_team, my_item_id, callback):
     options = []
@@ -226,7 +229,19 @@ class ThankYouNext(discord.ui.Button):
     super().__init__(style = discord.ButtonStyle.blurple, label = "Thank you, Next!")
 
   async def callback(self, interaction):
-    await interaction.edit(content = f"Honestly I have no idea how to implement this. Contact a @Staff !", view = None)
+    # make sure team is not ready
+    if db.is_team_ready(self.team):
+      await interaction.edit(content = "Your team is ready to roll. Please roll first!", view = None)
+      return
+
+    db.complete_tile(self.team)
+    db.set_roll_size(self.team, DEFAULT_ROLL_SIZE)
+    db.set_roll_modifier(self.team, DEFAULT_ROLL_MODIFIER)
+    # add 1 star to the team
+    db.add_star(self.team)
+    db.remove_item(self.team, self.item_id)
+
+    await interaction.edit(content = f"Your tile has been completed!", view = None)
 
 class CustomDie(discord.ui.Button):
   def __init__(self, my_team, item_id):
