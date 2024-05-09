@@ -1,11 +1,14 @@
 import psycopg
 from psycopg_pool import ConnectionPool
+from psycopg.types.json import Jsonb
 
 from dotenv import load_dotenv
 load_dotenv()
 import os
 
 import wom
+
+import json
 
 dbpool = ConnectionPool(conninfo = os.getenv("DATABASE_URL"))
 
@@ -122,6 +125,10 @@ def ensure_teams_table():
       cur.execute("""CREATE TABLE IF NOT EXISTS teams (
                   team text PRIMARY KEY, 
                   tile int, 
+                  tile_blockers jsonb[] DEFAULT '{}'::jsonb[],
+                  last_tile int,
+                  roll_size int DEFAULT 4,
+                  roll_modifier int DEFAULT 0,
                   discord_ids text[], 
                   items text[], 
                   ready boolean, 
@@ -140,6 +147,14 @@ def get_teams():
       values = cur.fetchall()
       return values
 
+def get_team_names():
+  with dbpool.connection() as conn:
+    with conn.cursor() as cur:
+      # Get all the team names from the table
+      cur.execute("SELECT team FROM teams")
+      values = cur.fetchall()
+      return [value[0] for value in values]
+
 def create_team(team):
   success = False
   with dbpool.connection() as conn:
@@ -153,6 +168,10 @@ def create_team(team):
       cur.execute("""INSERT INTO teams (
                   team, 
                   tile, 
+                  tile_blockers,
+                  last_tile,
+                  roll_size,
+                  roll_modifier,
                   discord_ids, 
                   items, 
                   ready, 
@@ -163,7 +182,11 @@ def create_team(team):
                   last_roll_time
                   ) VALUES (
                   %s, 
-                  -1, 
+                  -1,
+                  '{}'::jsonb[], 
+                  -1,
+                  4,
+                  0,
                   '{}', 
                   '{}', 
                   true, 
@@ -278,6 +301,9 @@ def move_team(team, roll, max_tile = 20):
         # Move the team forward
         cur.execute("UPDATE teams SET tile = tile + %s WHERE team = %s", (roll, team))
 
+      # Set the previous tile
+      cur.execute("UPDATE teams SET last_tile = %s WHERE team = %s", (value[0], team))
+
       # Set the team to not ready and last roll time to now
       cur.execute("UPDATE teams SET ready = false, last_roll_time = now() WHERE team = %s", (team, ))
       conn.commit()
@@ -291,18 +317,53 @@ def get_team_tile(team):
       cur.execute("SELECT tile FROM teams WHERE team = %s", (team, ))
       value = cur.fetchone()
       return value[0] if value is not None else None
+    
+def get_previous_tile(team):
+  with dbpool.connection() as conn:
+    with conn.cursor() as cur:
+      # Get the team from the table
+      cur.execute("SELECT last_tile FROM teams WHERE team = %s", (team, ))
+      value = cur.fetchone()
+      return value[0] if value is not None else None
+
+def set_team_tile(team, tile):
+  with dbpool.connection() as conn:
+    with conn.cursor() as cur:
+      # Set the tile for the team
+      cur.execute("UPDATE teams SET tile = %s WHERE team = %s", (tile, team))
+      conn.commit()
 
 def complete_tile(team):
   with dbpool.connection() as conn:
     with conn.cursor() as cur:
-      # Check if the team is ready to complete the tile
-      cur.execute("SELECT ready FROM teams WHERE team = %s", (team, ))
-      value = cur.fetchone()
-      if value[0]:
-        return
-
-      # Set the team to ready
+      # Complete the tile
       cur.execute("UPDATE teams SET ready = true WHERE team = %s", (team, ))
+
+      # Get the tile from the table
+      cur.execute("SELECT tile FROM teams WHERE team = %s", (team, ))
+      value = cur.fetchone()
+      tile = value[0]
+
+      # Reset the "gained" field in the side progress
+      # Get the side progress from the table as a json
+      cur.execute("SELECT side_progress FROM teams WHERE team = %s", (team, ))
+      value = json.dumps(cur.fetchall())
+      value_dict = json.loads(value)[0][0]
+      if value_dict and str(tile) in value_dict:
+        for key in value_dict[str(tile)]:
+          value_dict[str(tile)][key]["gained"] = 0
+        cur.execute("UPDATE teams SET side_progress = jsonb_set(side_progress, %s, %s) WHERE team = %s", ([str(tile)], json.dumps(value_dict[str(tile)]), team))
+
+      # Reset the "value" field in the main progress
+      # Get the main progress from the table as a json
+      cur.execute("SELECT tile_progress FROM teams WHERE team = %s", (team, ))
+      value = json.dumps(cur.fetchall())
+      value_dict = json.loads(value)[0][0]
+      if value_dict and str(tile) in value_dict:
+        for key in value_dict[str(tile)]:
+          value_dict[str(tile)][key]["value"] = 0
+        cur.execute("UPDATE teams SET tile_progress = jsonb_set(tile_progress, %s, %s) WHERE team = %s", ([str(tile)], json.dumps(value_dict[str(tile)]), team))
+
       conn.commit()
 
 def get_star_count(team):
@@ -355,3 +416,82 @@ def get_coin_count(team):
       cur.execute("SELECT coins FROM teams WHERE team = %s", (team, ))
       value = cur.fetchone()
       return value[0] if value is not None else None
+
+def get_items(team):
+  with dbpool.connection() as conn:
+    with conn.cursor() as cur:
+      # Get the team from the table
+      cur.execute("SELECT items FROM teams WHERE team = %s", (team, ))
+      value = cur.fetchone()
+      return value[0] if value is not None else None
+
+def add_item(team, item):
+  with dbpool.connection() as conn:
+    with conn.cursor() as cur:
+      # Add an item to the team
+      cur.execute("UPDATE teams SET items = array_append(teams.items, %s) WHERE team = %s", (str(item), team))
+      conn.commit()
+
+def remove_item(team, item):
+  with dbpool.connection() as conn:
+    with conn.cursor() as cur:
+      # get the items from the team
+      cur.execute("SELECT items FROM teams WHERE team = %s", (team, ))
+      value = cur.fetchone()
+      if value is None:
+        return
+      
+      # Remove the first instance of the item from the array
+      if item in value[0]:
+        items = value[0]
+        items.remove(item)
+
+      cur.execute("UPDATE teams SET items = %s WHERE team = %s", (items, team))
+      conn.commit()
+
+def add_tile_blocker(team, tile_blocker):
+  with dbpool.connection() as conn:
+    with conn.cursor() as cur:
+      # Get the array of tile blockers from the team
+      cur.execute("SELECT tile_blockers FROM teams WHERE team = %s", (team, ))
+
+      # If the team doesn't have any tile blockers, set the array to an empty array
+      value = cur.fetchone()
+      if value is None:
+        cur.execute("UPDATE teams SET tile_blockers = %s WHERE team = %s", ([tile_blocker], team))
+        conn.commit()
+        return
+      
+      # Otherwise add the tile blocker to the array
+      cur.execute("UPDATE teams SET tile_blockers = array_append(teams.tile_blockers, %s) WHERE team = %s", (Jsonb(tile_blocker), team))
+      conn.commit()
+
+def get_roll_size(team):
+  with dbpool.connection() as conn:
+    with conn.cursor() as cur:
+      # Get the team from the table
+      cur.execute("SELECT roll_size FROM teams WHERE team = %s", (team, ))
+      value = cur.fetchone()
+      return value[0] if value is not None else None
+    
+def get_roll_modifier(team):
+  with dbpool.connection() as conn:
+    with conn.cursor() as cur:
+      # Get the team from the table
+      cur.execute("SELECT roll_modifier FROM teams WHERE team = %s", (team, ))
+      value = cur.fetchone()
+      return value[0] if value is not None else None
+
+def set_roll_modifier(team, modifier):
+  with dbpool.connection() as conn:
+    with conn.cursor() as cur:
+      # Set the roll modifier for the team
+      cur.execute("UPDATE teams SET roll_modifier = %s WHERE team = %s", (modifier, team))
+      conn.commit()
+
+def set_roll_size(team, size):
+  with dbpool.connection() as conn:
+    with conn.cursor() as cur:
+      # Set the roll size for the team
+      cur.execute("UPDATE teams SET roll_size = %s WHERE team = %s", (size, team))
+      conn.commit()

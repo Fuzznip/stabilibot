@@ -10,6 +10,8 @@ import utils.db as db
 import random
 
 PASSED_START_STAR_COUNT = 3
+DEFAULT_ROLL_SIZE = 4
+DEFAULT_ROLL_MODIFIER = 0
 
 class Roll(commands.Cog):
   def __init__(self, bot):
@@ -31,7 +33,9 @@ class Roll(commands.Cog):
       return
     
     # Roll the die
-    roll = random.randint(1, 4)
+    roll_size = db.get_roll_size(team)
+    roll_mod = db.get_roll_modifier(team)
+    roll = random.randint(1, roll_size) + roll_mod
 
     # Move the team forward
     if db.move_team(team, roll, 20):
@@ -58,7 +62,9 @@ class RollTeam(commands.Cog):
       return
 
     # Roll the die
-    roll = random.randint(1, 4)
+    roll_size = db.get_roll_size(team_name)
+    roll_mod = db.get_roll_modifier(team_name)
+    roll = random.randint(1, roll_size) + roll_mod
 
     # Move the team forward
     if db.move_team(team_name, roll, 20):

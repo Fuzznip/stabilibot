@@ -19,6 +19,7 @@ from cogs.tile_race.roll import Roll, RollTeam
 from cogs.tile_race.create_team import ViewTeams, CreateTeam, DeleteTeam
 from cogs.tile_race.add_player import AddPlayer, RemovePlayer
 from cogs.tile_race.complete_tile import CompleteTile, AddCoins, SetStars
+from cogs.tile_race.items import Items, AddItem
 
 class Stabilibot(commands.Bot):
   def __init__(self):
@@ -53,4 +54,6 @@ bot.add_cog(RemovePlayer(bot))
 bot.add_cog(CompleteTile(bot))
 bot.add_cog(AddCoins(bot))
 bot.add_cog(SetStars(bot))
+bot.add_cog(Items(bot))
+bot.add_cog(AddItem(bot))
 bot.run(os.getenv("TOKEN"))

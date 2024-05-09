@@ -7,6 +7,9 @@ import os
 
 import utils.db as db
 
+DEFAULT_ROLL_SIZE = 4
+DEFAULT_ROLL_MODIFIER = 0
+
 class CompleteTile(commands.Cog):
   def __init__(self, bot):
     self.bot = bot
@@ -22,6 +25,8 @@ class CompleteTile(commands.Cog):
     
     # Complete the tile
     db.complete_tile(team_name)
+    db.set_roll_size(team_name, DEFAULT_ROLL_SIZE)
+    db.set_roll_modifier(team_name, DEFAULT_ROLL_MODIFIER)
     # add 1 star to the team
     db.add_star(team_name)
 
