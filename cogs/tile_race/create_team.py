@@ -12,15 +12,39 @@ class ViewTeams(commands.Cog):
     self.bot = bot
     db.ensure_teams_table()
 
-  @discord.slash_command(name = "view_teams", description = "View all teams", guild_ids = [int(os.getenv("GUILD_ID"))])
+  @discord.slash_command(name = "view_teams", description = "View all teams standings", guild_ids = [int(os.getenv("GUILD_ID"))])
   async def view_teams(self, interaction):
     teams = db.get_teams()
 
     if not teams:
       await interaction.response.send_message("No teams found.", ephemeral = True)
       return
+    
+    team_strings = []
 
-    await interaction.response.send_message(teams, ephemeral = True)
+    for team in teams:
+      name = team[0]
+      tile = team[1]
+      ready = team[8]
+      items = team[7]
+      main_progress = team[11]
+      side_progress = team[12]
+      stars = team[9]
+      coins = team[10]
+
+      tile_data = db.get_tile(tile)
+      tile_name = tile_data[1]
+
+      item_list = []
+      for item in items:
+        item_name = db.get_item_name(int(item))
+        item_list.append(item_name)
+
+      ready_string = 'ready' if ready else 'not ready'
+
+      team_strings.append(f"{ name }: tile { tile + 1 } ({tile_name}) with { stars } stars and { coins } coins. They are {ready_string} to roll. Their available items are: [ { ', '.join(item_list) } ]")
+
+    await interaction.response.send_message("\n".join(team_strings), ephemeral = True)
 
 class MyTeam(commands.Cog):
   def __init__(self, bot):

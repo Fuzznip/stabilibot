@@ -503,3 +503,19 @@ def get_tile(tile_id):
       cur.execute("SELECT * FROM tiles WHERE tile_id = %s", (tile_id, ))
       value = cur.fetchone()
       return value if value is not None else None
+
+def get_item_name(item_id):
+  item_classes = [
+    "SucksToSuck", # 0
+    "SwitchItUp", # 1
+    "StealAStar", # 2
+    "TimeToSkill",  # 3
+    "Deny", # 4
+    "Reroll", # 5
+    "FourPlusFour", # 6
+    "Teleport",   # 7
+    "ThankYouNext", # 8
+    "CustomDie" # 9
+  ]
+
+  return item_classes[item_id]
