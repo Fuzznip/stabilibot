@@ -76,3 +76,18 @@ class RollTeam(commands.Cog):
       await interaction.response.send_message(f"{ team_name } rolled a { roll }. They have looped to the beginning, gained {PASSED_START_STAR_COUNT} stars, and are now on tile { db.get_team_tile(team_name) + 1 } with { stars } stars!", ephemeral = False)
     else:
       await interaction.response.send_message(f"{ team_name } rolled a { roll }! { team_name } is now on tile { db.get_team_tile(team_name) + 1 }", ephemeral = False)  
+
+class MoveToTile(commands.Cog):
+  def __init__(self, bot):
+    self.bot = bot
+    db.ensure_teams_table()
+
+  @commands.has_role("Staff")
+  @discord.slash_command(name="move_to_tile", description="Moves a team to a specific tile", guild_ids=[int(os.getenv("GUILD_ID"))])
+  async def move_to_tile(self, interaction, team_name: str, tile: int):
+    # Complete current tile
+    db.complete_tile(team_name)
+    # Move the team to the specified tile
+    db.set_team_tile(team_name, tile)
+
+    await interaction.response.send_message(f"{ team_name } has been moved to tile { tile }", ephemeral = True)
