@@ -22,6 +22,32 @@ class ViewTeams(commands.Cog):
 
     await interaction.response.send_message(teams, ephemeral = True)
 
+class MyTeam(commands.Cog):
+  def __init__(self, bot):
+    self.bot = bot
+    db.ensure_teams_table()
+
+  @discord.slash_command(name = "my_team", description = "View your team", guild_ids = [int(os.getenv("GUILD_ID"))])
+  async def my_team(self, interaction):
+    team = db.get_team(str(interaction.author.id))
+
+    if team is None:
+      await interaction.response.send_message("You are not on a team. Please join a team.", ephemeral = True)
+      return
+
+    tile_id = db.get_team_tile(team)
+    tile_data = db.get_tile(tile_id)
+    tile_name = tile_data[1]
+
+    stars = db.get_star_count(team)
+    coins = db.get_coin_count(team)
+
+    await interaction.response.send_message(f"""You are on team { team }.
+Your team currently has { stars } stars and { coins } coins.
+You are on tile number {tile_id + 1}: {tile_name}.
+
+Want more information? Ask what you want to see out of the bot at https://discord.com/channels/519627285503148032/1238326277191241728""", ephemeral = True)
+
 class CreateTeam(commands.Cog):
   def __init__(self, bot):
     self.bot = bot
