@@ -37,16 +37,20 @@ class Roll(commands.Cog):
     roll_mod = db.get_roll_modifier(team)
     roll = random.randint(1, roll_size) + roll_mod
 
-    # Move the team forward
-    if db.move_team(team, roll, 20):
-      # Add stars to the team
+    passed_go = db.move_team(team, roll, 20)
+    new_tile = db.get_team_tile(team)
+
+    tile_data = db.get_tile(new_tile)
+    tile_name = tile_data[1]
+    
+    if passed_go:
       db.add_stars(team, PASSED_START_STAR_COUNT)
 
       # Get star count
       stars = db.get_star_count(team)
-      await interaction.response.send_message(f"{ team } rolled a { roll }. They have looped to the beginning, gained {PASSED_START_STAR_COUNT} stars, and are now on tile { db.get_team_tile(team) + 1 } with { stars } stars!!", ephemeral = False)
+      await interaction.response.send_message(f"{ team } rolled a { roll }. They have looped to the beginning, gained {PASSED_START_STAR_COUNT} stars for a total of { stars } stars, and are now on tile { db.get_team_tile(team) + 1 }: \"{ tile_name }\"!!", ephemeral = False)
     else:
-      await interaction.response.send_message(f"{ team } rolled a { roll }! { team } is now on tile { db.get_team_tile(team) + 1 }", ephemeral = False)    
+      await interaction.response.send_message(f"{ team } rolled a { roll }! { team } is now on tile { db.get_team_tile(team) + 1 }: \"{tile_name}\"!!!", ephemeral = False)    
 
 class RollTeam(commands.Cog):
   def __init__(self, bot):

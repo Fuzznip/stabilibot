@@ -495,3 +495,11 @@ def set_roll_size(team, size):
       # Set the roll size for the team
       cur.execute("UPDATE teams SET roll_size = %s WHERE team = %s", (size, team))
       conn.commit()
+
+def get_tile(tile_id):
+  with dbpool.connection() as conn:
+    with conn.cursor() as cur:
+      # Get the tile from the table
+      cur.execute("SELECT * FROM tiles WHERE tile_id = %s", (tile_id, ))
+      value = cur.fetchone()
+      return value if value is not None else None
