@@ -172,9 +172,9 @@ class ViewTeam(commands.Cog):
   @discord.slash_command(name = "view_team", description = "View a team", guild_ids = [int(os.getenv("GUILD_ID"))])
   async def view_team(self, interaction, team_name: str):
     team = team_name
-    
-    if team is None:
-      await interaction.response.send_message("You are not on a team. Please join a team.", ephemeral = True)
+
+    if db.team_exists(team) == False:
+      await interaction.response.send_message("Team does not exist.", ephemeral = True)
       return
 
     tile_id = db.get_team_tile(team)
