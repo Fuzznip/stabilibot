@@ -165,13 +165,13 @@ class Reroll(discord.ui.Button):
     super().__init__(style = discord.ButtonStyle.blurple, label = "Reroll!")
 
   async def callback(self, interaction):
-    tile = db.get_team_tile(self.team)
+    old_tile = db.get_team_tile(self.team)
     prev_tile = db.get_previous_tile(self.team)
     # TODO: real logic
-    if tile < prev_tile:
-      old_roll = tile + 20 - prev_tile
+    if old_tile < prev_tile:
+      old_roll = old_tile + 20 - prev_tile
     else:
-      old_roll = tile - prev_tile
+      old_roll = old_tile - prev_tile
     
     roll_size = db.get_roll_size(self.team)
     roll_modifier = db.get_roll_modifier(self.team)
@@ -182,14 +182,18 @@ class Reroll(discord.ui.Button):
       if(new_roll == old_roll):
         print("Rerolling...")
 
+
     db.complete_tile(self.team)
     db.set_team_tile(self.team, prev_tile)
     db.move_team(self.team, new_roll)
     new_tile = db.get_team_tile(self.team)
+    if new_tile > prev_tile and old_tile < prev_tile:
+      print(f"{self.team} rerolled from {old_tile} and went back to {new_tile}. This is just before they looped so they lose 3 stars.")
+      db.set_stars(self.team, db.get_star_count(self.team) - 3)
 
     db.remove_item(self.team, self.item_id)
 
-    await interaction.edit(content = f"You have rerolled from tile { tile + 1 }. You have rolled a { new_roll } instead and are now on tile { new_tile + 1 }!", view = None)
+    await interaction.edit(content = f"You have rerolled from tile { old_tile + 1 }. You have rolled a { new_roll } instead and are now on tile { new_tile + 1 }!", view = None)
 
 class FourPlusFour(discord.ui.Button):
   def __init__(self, my_team, item_id):
