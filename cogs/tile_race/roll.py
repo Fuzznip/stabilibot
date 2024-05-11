@@ -42,7 +42,28 @@ class Roll(commands.Cog):
 
     tile_data = db.get_tile(new_tile)
     tile_name = tile_data[1]
+    tile_extra = tile_data[2]
     
+    # Check if the tile has the "free" property
+    if "free" in tile_extra:
+      is_free_tile = tile_extra["free"]
+      
+      if is_free_tile:
+        # Complete the tile
+        db.complete_tile(team)
+        db.set_roll_size(team, DEFAULT_ROLL_SIZE)
+        db.set_roll_modifier(team, DEFAULT_ROLL_MODIFIER)
+        # add 1 star to the team
+        db.add_star(team)
+    else:
+      is_free_tile = False
+
+    if is_free_tile:
+      if passed_go: 
+        db.add_stars(team, PASSED_START_STAR_COUNT)
+
+      await interaction.response.send_message(f"{ team } rolled a { roll }! { team } is now on tile { db.get_team_tile(team) + 1 }: \"{tile_name}\"!!!\n\nOh shit that's a free tile! { team } has auto-completed the tile and gained 1 star!\n\nRoll again!", ephemeral = False)
+
     if passed_go:
       db.add_stars(team, PASSED_START_STAR_COUNT)
 

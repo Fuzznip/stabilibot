@@ -293,7 +293,7 @@ def move_team(team, roll, max_tile = 20):
       cur.execute("SELECT tile FROM teams WHERE team = %s", (team, ))
       value = cur.fetchone()
       
-      if value[0] + roll >= max_tile:
+      if value[0] + roll > max_tile:
         # Loop back to the beginning
         cur.execute("UPDATE teams SET tile = %s WHERE team = %s", (value[0] + roll - max_tile, team))
         looped = True
@@ -519,3 +519,35 @@ def get_item_name(item_id):
   ]
 
   return item_classes[item_id]
+
+def get_main_progress(team, tile):
+  with dbpool.connection() as conn:
+    with conn.cursor() as cur:
+      # Get the main progress from the table as a json
+      cur.execute("SELECT tile_progress FROM teams WHERE team = %s", (team, ))
+      value = json.dumps(cur.fetchall())
+      value_dict = json.loads(value)[0][0]
+      if value_dict is None:
+        return None
+      
+      # loop through value tuple
+      if str(tile) not in value_dict:
+        return {}
+      
+      return value_dict[str(tile)]
+
+def get_side_progress(team, tile):
+  with dbpool.connection() as conn:
+    with conn.cursor() as cur:
+      # Get the side progress from the table as a json
+      cur.execute("SELECT side_progress FROM teams WHERE team = %s", (team, ))
+      value = json.dumps(cur.fetchall())
+      value_dict = json.loads(value)[0][0]
+      if value_dict is None:
+        return None
+      
+      # loop through value tuple
+      if str(tile) not in value_dict:
+        return {}
+      
+      return value_dict[str(tile)]
