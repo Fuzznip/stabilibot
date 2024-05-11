@@ -7,6 +7,8 @@ import os
 
 import utils.db as db
 
+import time
+
 class ViewTeams(commands.Cog):
   def __init__(self, bot):
     self.bot = bot
@@ -53,6 +55,7 @@ class MyTeam(commands.Cog):
 
   @discord.slash_command(name = "my_team", description = "View your team", guild_ids = [int(os.getenv("GUILD_ID"))])
   async def my_team(self, interaction):
+    await interaction.response.defer()
     team = db.get_team(str(interaction.author.id))
 
     if team is None:
@@ -154,7 +157,7 @@ class MyTeam(commands.Cog):
       coins_gained += team_side_progress[object]["gained"] if "gained" in team_side_progress[object] else 0
 
     progress_string = "\n".join(progress)
-    await interaction.response.send_message(f"""You are on team { team }.
+    await interaction.followup.send(f"""You are on team { team }.
 Your team currently has { stars } stars and { coins } coins.
 You are on tile number {tile_id + 1}: {tile_name}.
 
@@ -171,6 +174,7 @@ class ViewTeam(commands.Cog):
 
   @discord.slash_command(name = "view_team", description = "View a team", guild_ids = [int(os.getenv("GUILD_ID"))])
   async def view_team(self, interaction, team_name: str):
+    await interaction.response.defer()
     team = team_name
 
     if db.team_exists(team) == False:
@@ -272,7 +276,7 @@ class ViewTeam(commands.Cog):
       coins_gained += team_side_progress[object]["gained"] if "gained" in team_side_progress[object] else 0
 
     progress_string = "\n".join(progress)
-    await interaction.response.send_message(f"""Team { team }:
+    await interaction.followup.send(f"""Team { team }:
 The team currently has { stars } stars and { coins } coins.
 They are on tile number {tile_id + 1}: {tile_name}.
 
