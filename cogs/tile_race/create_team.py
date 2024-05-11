@@ -164,6 +164,124 @@ Coins earned so far: {coins_gained}/8
 
 Want more information? Ask what you want to see out of the bot at https://discord.com/channels/519627285503148032/1238326277191241728""", ephemeral = True)
 
+class ViewTeam(commands.Cog):
+  def __init__(self, bot):
+    self.bot = bot
+    db.ensure_teams_table()
+
+  @discord.slash_command(name = "view_team", description = "View a team", guild_ids = [int(os.getenv("GUILD_ID"))])
+  async def view_team(self, interaction, team_name: str):
+    team = team_name
+    
+    if team is None:
+      await interaction.response.send_message("You are not on a team. Please join a team.", ephemeral = True)
+      return
+
+    tile_id = db.get_team_tile(team)
+    tile_data = db.get_tile(tile_id)
+    tile_name = tile_data[1]
+
+    stars = db.get_star_count(team)
+    coins = db.get_coin_count(team)
+    tile_main_progress = tile_data[2]
+    tile_side_progress = tile_data[3]
+    
+    team_main_progress = db.get_main_progress(team, tile_id)
+    team_side_progress = db.get_side_progress(team, tile_id)
+
+    progress = []
+    # Enumerate through the triggers of the main and side progress
+    progress.append(f"{tile_name} Quest Progress:")
+    # check if the team has main progress
+    if len(team_main_progress) > 0:
+      for trigger in tile_main_progress:
+        if "count" in trigger:
+          max_count = trigger["count"]
+        else:
+          max_count = 1
+
+        if "points" in trigger:
+          points = trigger["points"]
+        else:
+          points = 1
+
+        if "type" in trigger:
+          type = trigger["type"]
+        else:
+          type = "UNKNOWN"
+
+        if "name" in trigger:
+          name = trigger["name"]
+        else:
+          name = "unknown"
+
+        for t in trigger["trigger"]:
+          # remove everything in t after a :
+          t = t.split(":")[0]
+          t_lower = t.lower()
+          if t_lower in team_main_progress:
+            count = team_main_progress[t_lower]["value"]
+            if count > 0:
+              if type == "CHAT":
+                progress.append(f"\t{name} [{type}]: {count}/{max_count} ({points} stars)")
+              else:
+                progress.append(f"\t{t} [{type}]: {count}/{max_count} ({points} stars)")
+    else:
+      progress.append("\tNo main quest progress")
+    
+    # Enumerate through the triggers of the main and side progress
+    progress.append(f"{tile_name} Side Quest Progress:")
+    if len(team_side_progress) > 0:
+      for trigger in tile_side_progress:
+        if "count" in trigger:
+          max_count = trigger["count"]
+        else:
+          max_count = 1
+
+        if "points" in trigger:
+          points = trigger["points"]
+        else:
+          points = 1
+
+        if "type" in trigger:
+          type = trigger["type"]
+        else:
+          type = "UNKNOWN"
+
+        if "name" in trigger:
+          name = trigger["name"]
+        else:
+          name = "unknown"
+
+        for t in trigger["trigger"]:
+          # remove everything in t after a :
+          t = t.split(":")[0]
+          t_lower = t.lower()
+          if t_lower in team_side_progress:
+            count = team_side_progress[t_lower]["value"]
+            if count > 0:
+              if type == "CHAT":
+                progress.append(f"\t{name} [{type}]: {count}/{max_count} ({points} coins)")
+              else:
+                progress.append(f"\t{t} [{type}]: {count}/{max_count} ({points} coins)")
+    else:
+      progress.append("\tNo side quest progress")
+
+    coins_gained = 0
+    for object in team_side_progress:
+      coins_gained += team_side_progress[object]["gained"] if "gained" in team_side_progress[object] else 0
+
+    progress_string = "\n".join(progress)
+    await interaction.response.send_message(f"""Team { team }:
+The team currently has { stars } stars and { coins } coins.
+They are on tile number {tile_id + 1}: {tile_name}.
+
+{progress_string}
+
+Coins earned so far: {coins_gained}/8
+
+Want more information? Ask what you want to see out of the bot at https://discord.com/channels/519627285503148032/1238326277191241728""", ephemeral = True)
+
 class CreateTeam(commands.Cog):
   def __init__(self, bot):
     self.bot = bot
