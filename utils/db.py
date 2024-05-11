@@ -295,7 +295,7 @@ def move_team(team, roll, max_tile = 20):
       
       if value[0] + roll > max_tile:
         # Loop back to the beginning
-        cur.execute("UPDATE teams SET tile = %s WHERE team = %s", (value[0] + roll - max_tile, team))
+        cur.execute("UPDATE teams SET tile = %s WHERE team = %s", (value[0] + roll - max_tile - 1, team))
         looped = True
       else:
         # Move the team forward
