@@ -52,21 +52,14 @@ class AddCoins(commands.Cog):
 
     # Get the current coin count of the team
     current_coins = db.get_coin_count(team_name)
-    got_star = False
     # If the addition of coins would reach the cap of 10 coins, convert 10 coins to 1 star
-    if current_coins + coins >= 10:
-      coins_to_add = coins
-      coins = coins_to_add + current_coins - 10
+    if current_coins + coins >= 10:      
+      # Add coins to the team
+      db.set_coins(team_name, coins + current_coins - 10)
       db.add_star(team_name)
-      got_star = True
-
-    # Add coins to the team
-    db.set_coins(team_name, coins)
-
-    if got_star:
-      await interaction.response.send_message(f"Successfully added { coins_to_add } coins to { team_name }. They have gained a star and now have { coins } coins!", ephemeral = True)
-      return
-    await interaction.response.send_message(f"Successfully added { coins } coins to { team_name }. They now have { current_coins + coins } coins!", ephemeral = True)
+      await interaction.response.send_message(f"Successfully added { coins } coins to { team_name }. They have gained a star and now have { coins + current_coins - 10 } coins!", ephemeral = True)
+    else:
+      await interaction.response.send_message(f"Successfully added { coins } coins to { team_name }. They now have { current_coins + coins } coins!", ephemeral = True)
 
 class SetStars(commands.Cog):
   def __init__(self, bot):
