@@ -267,7 +267,7 @@ class CustomDie(discord.ui.Button):
       await interaction.edit(content = f"You have moved forward {number} tiles and are now on tile { tile + 1 }", view = None)
 
     view = discord.ui.View()
-    selector = discord.ui.Select(placeholder = "Select a number", options = [discord.SelectOption(label = str(i), value = str(i)) for i in range(1, 4)])
+    selector = discord.ui.Select(placeholder = "Select a number", options = [discord.SelectOption(label = str(i), value = str(i)) for i in range(1, 5)])
     selector.callback = cb
     view.add_item(selector)
     await interaction.response.defer()
