@@ -34,6 +34,11 @@ class SubmissionModal(ui.Modal):
         if response.status != 200:
           await interaction.response.send_message("Error submitting file.", ephemeral = True)
           return
+        
+        # get response data
+        data = await response.json()
+        await interaction.response.send_message(data["message"], ephemeral = True)
+        return
 
     await interaction.response.send_message("File submitted.", ephemeral = True)
 

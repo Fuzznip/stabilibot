@@ -24,30 +24,13 @@ async def add_user(discordId, username):
 
   success = False
 
-  # check if the username is a valid RuneScape username
-  try:
-    # Get user data from WOM
-    womClient = wom.Client(user_agent = "Stabilibot")
-    await womClient.start()
-    # get the first snapshot of the player
-    result = await womClient.players.update_player(username = username)
-    # Check if error is http response 429 (rate limited)
-    if not result.is_ok:
-      if result.status != 429: # rate limiting is fine we just want to check if the username is valid
-        await womClient.close()
-        return success
-    await womClient.close()
-  except:
-    await womClient.close()
-    return success
-
   with dbpool.connection() as conn:
     with conn.cursor() as cur:
       # First confirm that the username is not already linked to another discord account
       cur.execute("SELECT * FROM users WHERE username @> %s", ([username], ))
       if cur.fetchone() is not None:
         return success
-
+      
       # Get the user from the table
       cur.execute("SELECT * FROM users WHERE discord_id = %s", (discordId, ))
       # Check if the user exists
