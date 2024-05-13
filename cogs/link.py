@@ -16,6 +16,7 @@ class Link(commands.Cog):
 
   @discord.slash_command(name = "link", help = "Link your osrs account to your discord account.", guild_ids = [int(os.getenv("GUILD_ID"))])
   async def link(self, interaction, username: str):
+    print(f"{interaction.author.nick}: /link {username}")
     # check if the username is a valid RuneScape username
     try:
       # Get user data from WOM

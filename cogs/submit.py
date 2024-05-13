@@ -17,7 +17,9 @@ class SubmissionModal(ui.Modal):
     self.add_item(self.questionItemName)
     self.add_item(self.questionItemSource)
 
-  async def callback(self, interaction: discord.Interaction) -> None:
+  async def callback(self, interaction) -> None:
+    message = await interaction.response.defer(ephemeral = True, invisible = False)  # Acknowledge the interaction
+
     # Create json payload
     payload = {
       "timestamp": self.message.created_at.isoformat(),
@@ -29,20 +31,27 @@ class SubmissionModal(ui.Modal):
     }
 
     # Send the json payload to the SUBMISSION_ENDPOINT
-    async with aiohttp.ClientSession() as session:
-      async with session.post(os.getenv("SUBMISSION_ENDPOINT"), json = payload) as response:
-        if response.status != 200:
-          await interaction.response.send_message("Error submitting file.", ephemeral = True)
+    try:
+      async with aiohttp.ClientSession() as session:
+        async with session.post(os.getenv("SUBMISSION_ENDPOINT"), json = payload) as response:
+          if response.status != 200:
+            await interaction.followup.send("Error submitting file.")
+            return
+          
+          # get response data
+          data = await response.json()
+          await interaction.followup.send(data["message"])
           return
-        
-        # get response data
-        data = await response.json()
-        await interaction.response.send_message(data["message"], ephemeral = True)
-        return
+    except aiohttp.ClientConnectorError as e:
+      print(str(e))
+      await interaction.followup.send(f"Error connecting to server: {str(e)}")
+      return
+    except e:
+      print(str(e))
+      await interaction.followup.send(f"Unknown Error: {str(e)}")
+      return
 
-    await interaction.response.send_message("File submitted.", ephemeral = True)
-
-  questionItemName = discord.ui.InputText(label = "What is the name of the drop? (EXACT NAME)", style = discord.InputTextStyle.short, placeholder = "Scythe of Vitur (uncharged)", required = True)
+  questionItemName = discord.ui.InputText(label = "What is the name of the drop? (EXACT NAME)", style = discord.InputTextStyle.short, placeholder = "Scythe of vitur (uncharged)", required = True)
   questionItemSource = discord.ui.InputText(label = "Where did you get the drop?", style = discord.InputTextStyle.short, placeholder = "Theatre of Blood", required = True)
 
 class Submit(commands.Cog):
@@ -51,6 +60,7 @@ class Submit(commands.Cog):
 
   @discord.message_command(name = "Submit", guild_ids = [int(os.getenv("GUILD_ID"))])
   async def submit(self, interaction: discord.Interaction, message: discord.Message):
+    print(f"{interaction.author.nick}: /submit {message.author.nick}")
     # Check that the message contains exactly one attachment
     if len(message.attachments) != 1:
       await interaction.response.send_message("Please only submit on a message with exactly one file.", ephemeral = True)
