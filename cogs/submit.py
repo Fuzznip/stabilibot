@@ -60,7 +60,7 @@ class Submit(commands.Cog):
 
   @discord.message_command(name = "Submit", guild_ids = [int(os.getenv("GUILD_ID"))])
   async def submit(self, interaction: discord.Interaction, message: discord.Message):
-    print(f"{interaction.author.nick}: /submit {message.author.nick}")
+    print(f"{interaction.author.nick if interaction.author.nick is not None else interaction.user.name}: /submit {message.author.nick}")
     # Check that the message contains exactly one attachment
     if len(message.attachments) != 1:
       await interaction.response.send_message("Please only submit on a message with exactly one file.", ephemeral = True)

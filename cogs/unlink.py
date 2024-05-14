@@ -14,7 +14,7 @@ class Unlink(commands.Cog):
 
   @discord.slash_command(name = "unlink", help = "Unlinks an osrs account from your discord account.", guild_ids = [int(os.getenv("GUILD_ID"))])
   async def unlink(self, interaction, username: str):
-    print(f"{interaction.author.nick}: /unlink {username}")
+    print(f"{interaction.author.nick if interaction.author.nick is not None else interaction.user.name}: /unlink {username}")
     success = await db.remove_user(str(interaction.author.id), username)
     
     usernames = db.get_user(str(interaction.author.id))

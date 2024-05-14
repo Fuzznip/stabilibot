@@ -103,7 +103,7 @@ class Apply(commands.Cog):
   # Slash command to apply to join the clan
   @discord.slash_command(name = "apply", description = "Apply to join the clan", guild_ids = [int(os.getenv("GUILD_ID"))])
   async def apply(self, interaction):
-    print(f"{interaction.author.nick}: /apply")
+    print(f"{interaction.author.nick if interaction.author.nick is not None else interaction.user.name}: /apply")
     # Check if the interaction is in a guild
     if not interaction.guild:
       await interaction.response.send_message("This command can only be used in a server", ephemeral = True)

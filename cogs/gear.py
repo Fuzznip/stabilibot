@@ -32,6 +32,6 @@ class Gear(commands.Cog):
 
   @discord.slash_command(name = "gear", description = "minimum gear setup selector", guild_ids = [int(os.getenv("GUILD_ID"))])
   async def gear(self, interaction) -> None:
-    print(f"{interaction.author.nick}: /gear")
+    print(f"{interaction.author.nick if interaction.author.nick is not None else interaction.user.name}: /gear")
     embed = discord.Embed(title = "Select Content")
     await interaction.response.send_message(embed = embed, view = GearButtons(), ephemeral = True)
