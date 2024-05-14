@@ -23,6 +23,8 @@ class ApplicationModal(ui.Modal):
 
   async def callback(self, interaction: discord.Interaction) -> None:
     try:
+      await interaction.response.defer()
+
       # Get user data from WOM
       womClient = wom.Client(user_agent = "Stabilibot")
       await womClient.start()
@@ -33,7 +35,7 @@ class ApplicationModal(ui.Modal):
         snapshot = playerDetail.latest_snapshot
         if playerDetail.latest_snapshot is None:
           errorMessage = "Cannot find latest snapshot for player. Please try again later."
-          await interaction.response.send_message(errorMessage, ephemeral = True)
+          await interaction.followup.send(errorMessage, ephemeral = True)
           print(errorMessage)
           await womClient.close()
           return
@@ -81,12 +83,12 @@ class ApplicationModal(ui.Modal):
         # Link the user's OSRS username to their discord account
         await db.add_user(str(interaction.user.id), self.questionOsrsName.value)
 
-        await interaction.response.send_message("Application submitted!", ephemeral = True)
+        await interaction.followup.send("Application submitted!", ephemeral = True)
       else:
-        await interaction.response.send_message("Error fetching player data - double check the spelling of your OSRS username and then contact Staff if issue persists.", ephemeral = True)
+        await interaction.followup.send("Error fetching player data - double check the spelling of your OSRS username and then contact Staff if issue persists.", ephemeral = True)
       await womClient.close()
     except Exception as e:
-      await interaction.response.send_message(f"An error occurred: {e}", ephemeral = True)
+      await interaction.followup.send(f"An error occurred: {e}", ephemeral = True)
       print(e)
       await womClient.close()
 
