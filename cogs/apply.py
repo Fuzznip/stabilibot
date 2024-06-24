@@ -81,7 +81,10 @@ class ApplicationModal(ui.Modal):
           print("Bot does not have permission to change nickname for user: {}".format(interaction.user.display_name))
 
         # Link the user's OSRS username to their discord account
-        await db.add_user(str(interaction.user.id), self.questionOsrsName.value)
+        try:
+          await db.add_user(str(interaction.user.id), self.questionOsrsName.value)
+        except Exception as add_user_error:
+          print(f"Error linking user to OSRS username in db: {add_user_error}")
 
         await interaction.followup.send("Application submitted!", ephemeral = True)
       else:
