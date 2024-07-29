@@ -23,7 +23,7 @@ class SubmissionModal(ui.Modal):
     # Create json payload
     payload = {
       "timestamp": self.message.created_at.isoformat(),
-      "user": self.message.author.nick,
+      "user": self.message.author.nick if self.message.author.nick is not None else self.message.author.name,
       "discordId": self.message.author.id,
       "item": self.questionItemName.value,
       "source": self.questionItemSource.value,
@@ -35,6 +35,7 @@ class SubmissionModal(ui.Modal):
       async with aiohttp.ClientSession() as session:
         async with session.post(os.getenv("SUBMISSION_ENDPOINT"), json = payload) as response:
           if response.status != 200:
+            print(response.status)
             await interaction.followup.send("Error submitting file.")
             return
           
