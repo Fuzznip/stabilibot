@@ -7,7 +7,7 @@ load_dotenv()
 import os
 
 import wom
-from wom import Skills
+from wom import Metric, Skills
 
 import utils.db as db
 
@@ -39,8 +39,8 @@ class ApplicationModal(ui.Modal):
           print(errorMessage)
           await womClient.close()
           return
-        totalLevel = snapshot.data.skills[Skills("overall")].level
-        ehb = playerDetail.player.ehb
+        totalLevel = snapshot.data.skills[Metric('overall')].level
+        ehb = playerDetail.ehb
 
         # Create an embed with the title as the username
         embed = discord.Embed(title = self.questionOsrsName.value)
