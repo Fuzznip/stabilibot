@@ -24,7 +24,7 @@ class GearButtons(discord.ui.View):
     self.add_item(GearButton(label = "Nex", style = discord.ButtonStyle.blurple, image = "https://i.imgur.com/HjOdnq5.png"))
     self.add_item(GearButton(label = "CoX", style = discord.ButtonStyle.green, image = "https://i.imgur.com/yQoqVaH.png"))
     self.add_item(GearButton(label = "ToB", style = discord.ButtonStyle.red, image = "https://i.imgur.com/CLkzg2T.png"))
-    self.add_item(GearButton(label = "ToA", style = discord.ButtonStyle.grey, image = "https://i.imgur.com/2xIc7sO.png"))
+    self.add_item(GearButton(label = "ToA", style = discord.ButtonStyle.grey, image = "https://i.imgur.com/acD1jX7.png"))
 
 class Gear(commands.Cog):
   def __init__(self, bot):
