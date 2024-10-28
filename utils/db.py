@@ -12,7 +12,7 @@ import json
 
 dbpool = ConnectionPool(conninfo = os.getenv("DATABASE_URL"))
 
-def create_table():
+def ensure_user_db():
   with dbpool.connection() as conn:
     with conn.cursor() as cur:
       cur.execute("CREATE TABLE IF NOT EXISTS users (discord_id text PRIMARY KEY, username text[])")

@@ -10,7 +10,7 @@ import utils.db as db
 class Unlink(commands.Cog):
   def __init__(self, bot):
     self.bot = bot
-    db.create_table()
+    db.ensure_user_db()
 
   @discord.slash_command(name = "unlink", help = "Unlinks an osrs account from your discord account.", guild_ids = [int(os.getenv("GUILD_ID"))])
   async def unlink(self, interaction, username: str):
