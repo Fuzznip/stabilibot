@@ -15,11 +15,14 @@ from cogs.gear import Gear
 from cogs.submit import Submit
 from cogs.link import Link
 from cogs.unlink import Unlink
-from cogs.tile_race.roll import Roll, RollTeam, MoveToTile
-from cogs.tile_race.create_team import ViewTeams, ViewTeam, MyTeam, CreateTeam, DeleteTeam
-from cogs.tile_race.add_player import AddPlayer, RemovePlayer
-from cogs.tile_race.complete_tile import CompleteTile, AddCoins, SetStars
-from cogs.tile_race.items import Items, AddItem
+# from cogs.tile_race.roll import Roll, RollTeam, MoveToTile
+# from cogs.tile_race.create_team import ViewTeams, ViewTeam, MyTeam, CreateTeam, DeleteTeam
+# from cogs.tile_race.add_player import AddPlayer, RemovePlayer
+# from cogs.tile_race.complete_tile import CompleteTile, AddCoins, SetStars
+# from cogs.tile_race.items import Items, AddItem
+
+from cogs.sp2.create_team import CreateTeam
+from cogs.sp2.delete_team import DeleteTeam
 
 class Stabilibot(commands.Bot):
   def __init__(self):
@@ -59,4 +62,6 @@ bot.add_cog(Unlink(bot))
 # bot.add_cog(SetStars(bot))
 # bot.add_cog(Items(bot))
 # bot.add_cog(AddItem(bot))
+bot.add_cog(CreateTeam(bot))
+bot.add_cog(DeleteTeam(bot))
 bot.run(os.getenv("TOKEN"))
