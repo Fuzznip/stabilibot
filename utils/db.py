@@ -92,6 +92,14 @@ def get_user_from_username(username):
       value = cur.fetchone()
       return value[0] if value is not None else None
 
+def get_users_from_id(discordId):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the user from the table
+            cur.execute("SELECT username FROM users WHERE discord_id = %s", (discordId, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else None
+
 def ensure_teams_table():
     with dbpool.connection() as conn:
         with conn.cursor() as cur:
@@ -115,32 +123,34 @@ def get_team_names():
             values = cur.fetchall()
             return [value[0] for value in values]
 
+def get_team_id(team_name):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the team from the table
+            cur.execute("SELECT team FROM sp2teams WHERE team_name = %s", (team_name, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else None
+
 def create_team(team_name, roleId, textChannelId, voiceChannelId):
-    success = False
     with dbpool.connection() as conn:
         with conn.cursor() as cur:
             # If the team doesn't exist, add it to the table
             cur.execute("INSERT INTO sp2teams (team_name, previous_tile, current_tile, stars, coins, items, buffs, debuffs, progress, ready, main_die_sides, main_die_modifier, extra_dice_sides, role_id, text_channel_id, voice_channel_id) VALUES (%s, -1, -1, 0, 0, '{}', '{}', '{}', '{}'::jsonb, true, 4, 0, '{}', %s, %s, %s)", (team_name, roleId, textChannelId, voiceChannelId))
             conn.commit()
-            success = True
-
-    return success
 
 def delete_team(team_name):
-    success = False
     with dbpool.connection() as conn:
         with conn.cursor() as cur:
-            # Check if the team exists
-            cur.execute("SELECT * FROM sp2teams WHERE team_name = %s", (team_name, ))
-            if cur.fetchone() is None:
-                return success
-
             # If the team exists, remove it from the table
             cur.execute("DELETE FROM sp2teams WHERE team_name = %s", (team_name, ))
             conn.commit()
-            success = True
 
-    return success
+def rename_team(team_name, new_name):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Rename the team
+            cur.execute("UPDATE sp2teams SET team_name = %s WHERE team_name = %s", (new_name, team_name))
+            conn.commit()
 
 def team_exists(team_name):
     with dbpool.connection() as conn:
@@ -173,7 +183,26 @@ def get_voice_channel_id(team_name):
             value = cur.fetchone()
             return int(value[0]) if value is not None else None
 
+def ensure_sp2_users_db():
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Create users table
+            cur.execute("CREATE TABLE IF NOT EXISTS sp2users (discord_id TEXT PRIMARY KEY, usernames TEXT[], team SERIAL REFERENCES sp2teams(team))")
+            conn.commit()
 
+def add_user_to_team(discordId, usernames, teamId):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # If the user doesn't exist, add them to the table
+            cur.execute("INSERT INTO sp2users (discord_id, usernames, team) VALUES (%s, %s, %s)", (discordId, usernames, teamId))
+            conn.commit()
+
+def remove_user_from_team(discordId):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # If the user exists, remove them from the table
+            cur.execute("DELETE FROM sp2users WHERE discord_id = %s", (discordId, ))
+            conn.commit()
 
 # def ensure_teams_table():
 #   with dbpool.connection() as conn:
