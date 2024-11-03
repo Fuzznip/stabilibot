@@ -13,6 +13,7 @@ class AddUser(commands.Cog):
         # Ensure any databases that we need exist
         db.ensure_teams_table()
         db.ensure_user_db()
+        db.ensure_sp2_users_db()
 
     @commands.has_role("Staff") # TODO: Double check roles
     @discord.slash_command(name = "add_user", description = "Adds a user to a team", guild_ids = [int(os.getenv("GUILD_ID"))])
