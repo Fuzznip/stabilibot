@@ -13,7 +13,7 @@ class AddLink(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         db.ensure_user_db()
-
+@commands.has_role("Staff")
     @discord.slash_command(name = "add_link", help = "Link an osrs account to a discord account", guild_ids = [int(os.getenv("GUILD_ID"))])
     async def add_link(self, interaction, discordid: str, username: str):
         print(f"{interaction.author.nick if interaction.author.nick is not None else interaction.user.name}: /add_link {discordid} {username}")
