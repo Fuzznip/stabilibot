@@ -14,7 +14,7 @@ class AddUser(commands.Cog):
         db.ensure_teams_table()
         db.ensure_user_db()
 
-    @commands.has_role("Staff") # Double check roles
+    @commands.has_role("Staff") # TODO: Double check roles
     @discord.slash_command(name = "add_user", description = "Adds a user to a team", guild_ids = [int(os.getenv("GUILD_ID"))])
     async def command(self, interaction, team_name: str, username: str):
         # Log the command
