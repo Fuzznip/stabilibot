@@ -19,11 +19,11 @@ class Accounts(commands.Cog):
         # Defer the response
         accounts = db.get_user(str(interaction.author.id))
         if accounts:
-            await interaction.followup.send(f"Linked accounts: {', '.join(accounts)}", ephemeral = True)
+            await interaction.response.send_message(f"Linked accounts: {', '.join(accounts)}", ephemeral = True)
             return
         else:
-            await interaction.followup.send("No accounts linked", ephemeral = True)
+            await interaction.response.send_message("No accounts linked", ephemeral = True)
             return
 
-        await interaction.followup.send("Command not implemented", ephemeral = True)
+        await interaction.response.send_message("Command not implemented", ephemeral = True)
 
