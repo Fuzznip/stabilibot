@@ -20,6 +20,7 @@ class ApplicationModal(ui.Modal):
     self.add_item(self.questionRecruitmentMethod)
     self.add_item(self.questionReasonForJoining)
     self.add_item(self.questionInGameGoals)
+    db.ensure_user_db()
 
   async def callback(self, interaction: discord.Interaction) -> None:
     try:
