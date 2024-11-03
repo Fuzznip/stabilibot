@@ -13,7 +13,7 @@ class RenameTeam(commands.Cog):
         # Ensure any databases that we need exist
         db.ensure_teams_table()
 
-    @commands.has_role("Staff") # Double check roles
+    @commands.has_role("Staff")
     @discord.slash_command(name = "rename_team", description = "Renames a team and their channels", guild_ids = [int(os.getenv("GUILD_ID"))])
     async def command(self, interaction, team: str, new_name: str):
         # Log the command
