@@ -57,6 +57,8 @@ class DeleteTeam(commands.Cog):
 
         # delete the team
         try:
+            #TODO: Backup team data through a message or log before deleting the team in case someone accidentally does this and wants it reverted
+            #TODO: OR we can just mark the team as "deleted" and keep in database anyways
             db.delete_team(team_name)
         except Exception as e:
             await interaction.followup.send(f"An error occurred: {e}", ephemeral = True)
