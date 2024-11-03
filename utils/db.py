@@ -204,6 +204,13 @@ def remove_user_from_team(discordId):
             cur.execute("DELETE FROM sp2users WHERE discord_id = %s", (discordId, ))
             conn.commit()
 
+def user_in_team(discordId):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Check if the user is in a team
+            cur.execute("SELECT * FROM sp2users WHERE discord_id = %s", (discordId, ))
+            return cur.fetchone() is not None
+
 # def ensure_teams_table():
 #   with dbpool.connection() as conn:
 #     with conn.cursor() as cur:
