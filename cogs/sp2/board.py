@@ -62,7 +62,7 @@ class Board(commands.Cog):
         # Create a dictionary where the key is a tile and the value is the array of teams on that tile
         tiles = {}
         for team in teams:
-            tile = team[4]
+            tile = team[3]
             if tile in tiles:
                 # Insert sorted by team number
                 i = 0
@@ -76,7 +76,7 @@ class Board(commands.Cog):
             numOfTeamsOnTile = len(teams)
             for i, team in enumerate(teams):
                 # Get the team's image name
-                team_image = team[2]
+                team_image = team[17]
                 position = db.get_tile_position(tile)
                 x = int(position[1:position.index(",")])
                 y = int(position[position.index(",") + 1:-1])
