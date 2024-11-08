@@ -13,9 +13,9 @@ class Board(commands.Cog):
     def __init__(self, bot: discord.Bot):
         self.bot = bot
         # Ensure any databases that we need exist
-        self.iconSize = 48
-        self.iconPadding = 60
-        self.tileModifierPadding = 20
+        self.iconSize = 160
+        self.iconPadding = 140
+        self.tileModifierPadding = 30
 
     def get_offset(self, numOfTeamsOnTile, i, x, y):
         # If there is only one team on the tile, return the original position
