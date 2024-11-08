@@ -29,6 +29,11 @@ from cogs.sp2.delete_team import DeleteTeam
 from cogs.sp2.rename_team import RenameTeam
 from cogs.sp2.add_user import AddUser
 
+from cogs.sp2.roll import Roll
+from cogs.sp2.progress import Progress
+from cogs.sp2.board import Board
+from cogs.sp2.use_item import UseItem
+
 class Stabilibot(commands.Bot):
   def __init__(self):
     super().__init__(intents = intents)
@@ -73,4 +78,8 @@ bot.add_cog(CreateTeam(bot))
 bot.add_cog(DeleteTeam(bot))
 bot.add_cog(RenameTeam(bot))
 bot.add_cog(AddUser(bot))
+bot.add_cog(Roll(bot))
+bot.add_cog(Progress(bot))
+bot.add_cog(Board(bot))
+bot.add_cog(UseItem(bot))
 bot.run(os.getenv("TOKEN"))
