@@ -104,8 +104,58 @@ def ensure_teams_table():
     with dbpool.connection() as conn:
         with conn.cursor() as cur:
             # Create teams table
-            cur.execute("CREATE TABLE IF NOT EXISTS sp2teams (team SERIAL PRIMARY KEY, team_name TEXT, previous_tile INT, current_tile INT, stars INT, coins INT, items INT[], buffs INT[], debuffs INT[], progress jsonb, ready BOOLEAN, main_die_sides INT, main_die_modifier INT, extra_dice_sides INT[], role_id TEXT, text_channel_id TEXT, voice_channel_id TEXT)")
+            cur.execute("CREATE TABLE IF NOT EXISTS sp2teams (team SERIAL PRIMARY KEY, team_name TEXT, team_image TEXT, previous_tile INT, current_tile INT, stars INT, coins INT, coins_gained_this_tile INT, items INT[], buffs INT[], debuffs INT[], progress jsonb, ready BOOLEAN, rolling BOOLEAN, main_die_sides INT, main_die_modifier INT, extra_dice_sides INT[], role_id TEXT, text_channel_id TEXT, voice_channel_id TEXT)")
             conn.commit()
+
+def ensure_tiles_db():
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Create tiles table
+            cur.execute("CREATE TABLE IF NOT EXISTS sp2tiles (tile_id SERIAL PRIMARY KEY, tile_name TEXT, description TEXT, region_name TEXT, coin_challenge SERIAL references sp2challenges(id), task_challenge SERIAL references sp2challenges(id), region_challenge SERIAL references sp2challenges(id), has_star BOOLEAN, has_item_shop BOOLEAN, next_tiles INT[], position POINT)")
+            conn.commit()
+
+def ensure_task_db():
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Create tasks table
+            cur.execute("CREATE TABLE IF NOT EXISTS sp2tasks (id SERIAL PRIMARY KEY, triggers INT[], quantity INT)")
+            conn.commit()
+
+def ensure_challenge_db():
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Create challenges table
+            cur.execute("CREATE TABLE IF NOT EXISTS sp2challenges (id SERIAL PRIMARY KEY, name TEXT, description TEXT, tasks INT[])")
+            conn.commit()
+
+def ensure_trigger_db():
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Create triggers table
+            cur.execute("CREATE TABLE IF NOT EXISTS sp2triggers (trigger_id SERIAL PRIMARY KEY, trigger TEXT, source TEXT)")
+            conn.commit()
+
+def ensure_global_challenges_list_db():
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Create global challenges list table
+            cur.execute("CREATE TABLE IF NOT EXISTS sp2globalchallenges (id SERIAL PRIMARY KEY, challenges INT)")
+            conn.commit()
+
+def ensure_items_db():
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Create items table
+            cur.execute("CREATE TABLE IF NOT EXISTS sp2items (id SERIAL PRIMARY KEY, name TEXT, description TEXT, selects_anyone BOOLEAN, selects_opponent BOOLEAN, has_quantity BOOLEAN, price INT, rarity INT, style TEXT)")
+            conn.commit()
+            
+def get_tiles():
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get all the tiles from the table
+            cur.execute("SELECT * FROM sp2tiles")
+            values = cur.fetchall()
+            return values
 
 def get_teams():
     with dbpool.connection() as conn:
@@ -128,6 +178,14 @@ def get_team_id(team_name):
         with conn.cursor() as cur:
             # Get the team from the table
             cur.execute("SELECT team FROM sp2teams WHERE team_name = %s", (team_name, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else None
+
+def get_team_name(team_id):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the team from the table
+            cur.execute("SELECT team_name FROM sp2teams WHERE team = %s", (team_id, ))
             value = cur.fetchone()
             return value[0] if value is not None else None
 
@@ -210,6 +268,483 @@ def user_in_team(discordId):
             # Check if the user is in a team
             cur.execute("SELECT * FROM sp2users WHERE discord_id = %s", (discordId, ))
             return cur.fetchone() is not None
+
+def get_team(discordId):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the team from the table
+            cur.execute("SELECT team FROM sp2users WHERE discord_id = %s", (discordId, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else None
+
+def is_team_ready_to_roll(team):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the team from the table
+            cur.execute("SELECT ready FROM sp2teams WHERE team = %s", (team, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else None
+
+def is_team_rolling(team):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the team from the table
+            cur.execute("SELECT rolling FROM sp2teams WHERE team = %s", (team, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else None
+
+def get_current_tile(team):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the team from the table
+            cur.execute("SELECT current_tile FROM sp2teams WHERE team = %s", (team, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else None
+
+def get_tile_name(team):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the team from the table
+            cur.execute("SELECT tile_name FROM sp2tiles WHERE tile_id = %s", (team, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else None
+
+def get_next_tiles(tile):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the team from the table
+            cur.execute("SELECT next_tiles FROM sp2tiles WHERE tile_id = %s", (tile, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else []
+
+def get_main_die_sides(team):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the team from the table
+            cur.execute("SELECT main_die_sides FROM sp2teams WHERE team = %s", (team, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else 0
+
+def get_main_die_modifier(team):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the team from the table
+            cur.execute("SELECT main_die_modifier FROM sp2teams WHERE team = %s", (team, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else 0
+
+def get_extra_die_sides(team):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the team from the table
+            cur.execute("SELECT extra_dice_sides FROM sp2teams WHERE team = %s", (team, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else []
+
+def set_team_ready_to_roll(team):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Set the team to ready to roll
+            cur.execute("UPDATE sp2teams SET ready = true WHERE team = %s", (team, ))
+            conn.commit()
+
+def set_team_not_ready_to_roll(team):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Set the team to not ready to roll
+            cur.execute("UPDATE sp2teams SET ready = false WHERE team = %s", (team, ))
+            conn.commit()
+
+def set_team_rolling(team):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Set the team to rolling
+            cur.execute("UPDATE sp2teams SET rolling = true WHERE team = %s", (team, ))
+            conn.commit()
+
+def set_team_not_rolling(team):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Set the team to not rolling
+            cur.execute("UPDATE sp2teams SET rolling = false WHERE team = %s", (team, ))
+            conn.commit()
+
+def set_current_tile(team, tile):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Set the tile for the team
+            cur.execute("UPDATE sp2teams SET current_tile = %s WHERE team = %s", (tile, team))
+            conn.commit()
+
+def set_previous_tile(team, tile):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Set the previous tile for the team
+            cur.execute("UPDATE sp2teams SET previous_tile = %s WHERE team = %s", (tile, team))
+            conn.commit()
+
+def get_previous_tile(team):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the team from the table
+            cur.execute("SELECT previous_tile FROM sp2teams WHERE team = %s", (team, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else None
+
+def get_coins(team):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the team from the table
+            cur.execute("SELECT coins FROM sp2teams WHERE team = %s", (team, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else 0
+
+def set_coins(team, coins):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Set the coins for the team
+            cur.execute("UPDATE sp2teams SET coins = %s WHERE team = %s", (coins, team))
+            conn.commit()
+
+def get_stars(team):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the team from the table
+            cur.execute("SELECT stars FROM sp2teams WHERE team = %s", (team, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else 0
+
+def set_stars(team, stars):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Set the stars for the team
+            cur.execute("UPDATE sp2teams SET stars = %s WHERE team = %s", (stars, team))
+            conn.commit()
+
+def get_challenge_name(challenge):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the challenge from the table
+            cur.execute("SELECT name FROM sp2challenges WHERE id = %s", (challenge, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else None
+
+def get_challenge_description(challenge):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the challenge from the table
+            cur.execute("SELECT description FROM sp2challenges WHERE id = %s", (challenge, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else None
+
+def get_challenge_tasks(challenge):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the challenge from the table
+            cur.execute("SELECT tasks FROM sp2challenges WHERE id = %s", (challenge, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else None
+
+def get_task_triggers(task):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the task from the table
+            cur.execute("SELECT triggers FROM sp2tasks WHERE id = %s", (task, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else None
+
+def get_trigger_and_source(trigger):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the trigger from the table
+            cur.execute("SELECT trigger, source FROM sp2triggers WHERE trigger_id = %s", (trigger, ))
+            value = cur.fetchone()
+            return value[0], value[1] if value is not None else None
+
+def get_task_quantity(task):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the task from the table
+            cur.execute("SELECT quantity FROM sp2tasks WHERE id = %s", (task, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else None
+
+def get_team_tile(team):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the team from the table
+            cur.execute("SELECT current_tile FROM sp2teams WHERE team = %s", (team, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else None
+
+def get_team_stars(team):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the team from the table
+            cur.execute("SELECT stars FROM sp2teams WHERE team = %s", (team, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else None
+
+def get_team_coins(team):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the team from the table
+            cur.execute("SELECT coins FROM sp2teams WHERE team = %s", (team, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else None
+
+def get_team_items(team):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the team from the table
+            cur.execute("SELECT items FROM sp2teams WHERE team = %s", (team, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else None
+
+def get_coin_challenge(tile):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the tile from the table
+            cur.execute("SELECT coin_challenge FROM sp2tiles WHERE tile_id = %s", (tile, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else None
+
+def get_tile_challenge(tile):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the tile from the table
+            cur.execute("SELECT task_challenge FROM sp2tiles WHERE tile_id = %s", (tile, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else None
+
+def get_region_challenge(tile):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the tile from the table
+            cur.execute("SELECT region_challenge FROM sp2tiles WHERE tile_id = %s", (tile, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else None
+
+def get_global_challenge():
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the global challenge from the table
+            cur.execute("SELECT global_challenge FROM sp2game WHERE game_id = 1")
+            value = cur.fetchone()
+            return value[0] if value is not None else None
+
+def set_global_challenge(challenge):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Set the global challenge
+            cur.execute("UPDATE sp2game SET global_challenge = %s WHERE game_id = 1", (challenge, ))
+            conn.commit()
+
+def set_main_die_side(team, sides):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Set the main die sides for the team
+            cur.execute("UPDATE sp2teams SET main_die_sides = %s WHERE team = %s", (sides, team))
+            conn.commit()
+
+def set_main_die_modifier(team, modifier):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Set the main die modifier for the team
+            cur.execute("UPDATE sp2teams SET main_die_modifier = %s WHERE team = %s", (modifier, team))
+            conn.commit()
+
+def set_extra_die_sides(team, sides):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Set the extra die sides for the team
+            cur.execute("UPDATE sp2teams SET extra_dice_sides = %s WHERE team = %s", (sides, team))
+            conn.commit()
+
+def get_tile_positions():
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the tile positions from the table
+            cur.execute("SELECT tile_id FROM sp2tiles")
+            values = cur.fetchall()
+            return [value[0] for value in values]
+
+
+def has_star(tile):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Check if the tile has a star
+            cur.execute("SELECT has_star FROM sp2tiles WHERE tile_id = %s", (tile, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else False
+
+def has_item_shop(tile):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Check if the tile has an item shop
+            cur.execute("SELECT has_item_shop FROM sp2tiles WHERE tile_id = %s", (tile, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else False
+
+def count_teams_on_tile(tile):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the tile from the table
+            cur.execute("SELECT COUNT(*) FROM sp2teams WHERE current_tile = %s", (tile, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else 0
+
+def set_star(tile):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Set the tile to have a star
+            cur.execute("UPDATE sp2tiles SET has_star = true WHERE tile_id = %s", (tile, ))
+            conn.commit()
+
+def set_item_shop(tile):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Set the tile to have an item shop
+            cur.execute("UPDATE sp2tiles SET has_item_shop = true WHERE tile_id = %s", (tile, ))
+            conn.commit()
+
+def unset_star(tile):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Set the tile to not have a star
+            cur.execute("UPDATE sp2tiles SET has_star = false WHERE tile_id = %s", (tile, ))
+            conn.commit()
+
+def unset_item_shop(tile):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Set the tile to not have an item shop
+            cur.execute("UPDATE sp2tiles SET has_item_shop = false WHERE tile_id = %s", (tile, ))
+            conn.commit()
+
+def get_all_items():
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get all the items from the table
+            cur.execute("SELECT * FROM sp2items")
+            values = cur.fetchall()
+            return values
+
+def add_item_to_team(team, item):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the team from the table
+            cur.execute("SELECT items FROM sp2teams WHERE team = %s", (team, ))
+            value = cur.fetchone()
+            items = value[0] if value is not None else []
+            items.append(item)
+            # Add the item to the team
+            cur.execute("UPDATE sp2teams SET items = %s WHERE team = %s", (items, team))
+            conn.commit()
+
+def get_progress(team):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the team from the table
+            cur.execute("SELECT progress FROM sp2teams WHERE team = %s", (team, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else None
+
+def get_team_image(team):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the team from the table
+            cur.execute("SELECT team_image FROM sp2teams WHERE team = %s", (team, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else ""
+
+def get_tile_position(tile):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the tile from the table
+            cur.execute("SELECT position FROM sp2tiles WHERE tile_id = %s", (tile, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else None
+
+def get_star_tiles():
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the star tiles from the table
+            cur.execute("SELECT tile_id FROM sp2tiles WHERE has_star = true")
+            values = cur.fetchall()
+            return [value[0] for value in values]
+
+def get_item_shop_tiles():
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the item shop tiles from the table
+            cur.execute("SELECT tile_id FROM sp2tiles WHERE has_item_shop = true")
+            values = cur.fetchall()
+            return [value[0] for value in values]
+
+def get_items(team):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the team from the table
+            cur.execute("SELECT items FROM sp2teams WHERE team = %s", (team, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else []
+
+def get_item(item):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the item from the table
+            cur.execute("SELECT * FROM sp2items WHERE id = %s", (item, ))
+            value = cur.fetchone()
+            return value if value is not None else None
+
+def get_item_name(item):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the item from the table
+            cur.execute("SELECT name FROM sp2items WHERE id = %s", (item, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else None
+
+def give_team_die(team, die_sides):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the team from the table
+            cur.execute("SELECT extra_dice_sides FROM sp2teams WHERE team = %s", (team, ))
+            value = cur.fetchone()
+            extra_dice_sides = value[0] if value is not None else []
+            extra_dice_sides.append(die_sides)
+            # Give the team the die
+            cur.execute("UPDATE sp2teams SET extra_dice_sides = %s WHERE team = %s", (extra_dice_sides, team))
+            conn.commit()
+
+def remove_item(team, item):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the team from the table
+            cur.execute("SELECT items FROM sp2teams WHERE team = %s", (team, ))
+            value = cur.fetchone()
+            items = value[0] if value is not None else []
+            items.remove(item)
+            # Remove the item from the team
+            cur.execute("UPDATE sp2teams SET items = %s WHERE team = %s", (items, team))
+            conn.commit()
+
+def add_team_modifier(team, modifier):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the team from the table
+            cur.execute("UPDATE sp2teams SET main_die_modifier = main_die_modifier + %s WHERE team = %s", (modifier, team))
+            conn.commit()
+
+def get_global_challenges():
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the global challenges from the table
+            # Return challenges from all rows
+            cur.execute("SELECT challenges FROM sp2globalchallenges")
+            value = cur.fetchone()
+            return value[0] if value is not None else []
 
 # def ensure_teams_table():
 #   with dbpool.connection() as conn:
