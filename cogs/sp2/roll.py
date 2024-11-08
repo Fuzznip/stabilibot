@@ -86,8 +86,24 @@ class Roll(commands.Cog):
         # Send the message
         message = self.roll_message
         message += f"\nYou moved forward {self.total_distance} tiles from {db.get_tile_name(db.get_previous_tile(team))} and are now at {db.get_tile_name(db.get_current_tile(team))}!"
+
+        # If we landed on a random event tile
+        if db.get_tile_challenge(current_tile) == -1:
+            # Find a random challenge
+            challenges = db.get_all_random_challenges()
+            challenge = random.choice(challenges)
+            
+            # Set the challenge for the team
+            db.set_team_random_challenge(team, challenge)
+            db.set_team_is_doing_random_challenge(team)
+
+            message += f"\nYou landed on a random event tile! Your challenge is: {db.get_challenge_name(challenge)}!\n"
+        else:
+            db.set_team_is_not_doing_random_challenge(team)
+
         await interaction.followup.send(message, ephemeral = False)
         db.set_team_not_rolling(team)
+
         
         # Send the final movement from the previous tile to the current tile to the event channel
         message = f"Team {db.get_team_name(team)} moved forward {self.total_distance} tiles from {db.get_tile_name(db.get_previous_tile(team))} and are now at {db.get_tile_name(db.get_current_tile(team))}!"

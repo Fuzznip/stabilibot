@@ -49,6 +49,8 @@ class Progress(commands.Cog):
                     triggerList.append(f"{trigger} from {source}")
 
             # Add the task to the embed
+            print(f"Get { ' OR '.join(triggerList) }")
+            print(f"{self.get_progress(team, challenge, task)} / {db.get_task_quantity(task)}")
             challenge_embed.add_field(name = "Get " + " OR ".join(triggerList), value = f"{self.get_progress(team, challenge, task)} / {db.get_task_quantity(task)}", inline = False)
         # Add the embed to the list of embeds
         embeds.append(challenge_embed)

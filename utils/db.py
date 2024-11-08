@@ -104,7 +104,7 @@ def ensure_teams_table():
     with dbpool.connection() as conn:
         with conn.cursor() as cur:
             # Create teams table
-            cur.execute("CREATE TABLE IF NOT EXISTS sp2teams (team SERIAL PRIMARY KEY, team_name TEXT, team_image TEXT, previous_tile INT, current_tile INT, stars INT, coins INT, coins_gained_this_tile INT, items INT[], buffs INT[], debuffs INT[], progress jsonb, ready BOOLEAN, rolling BOOLEAN, main_die_sides INT, main_die_modifier INT, extra_dice_sides INT[], role_id TEXT, text_channel_id TEXT, voice_channel_id TEXT)")
+            cur.execute("CREATE TABLE IF NOT EXISTS sp2teams (team SERIAL PRIMARY KEY, team_name TEXT, team_image TEXT, previous_tile INT, current_tile INT, stars INT, coins INT, coins_gained_this_tile INT, items INT[], buffs INT[], debuffs INT[], progress jsonb, ready BOOLEAN, rolling BOOLEAN, main_die_sides INT, main_die_modifier INT, extra_dice_sides INT[], role_id TEXT, text_channel_id TEXT, voice_channel_id TEXT, is_on_random_tile BOOLEAN, random_challenge INT)")
             conn.commit()
 
 def ensure_tiles_db():
@@ -747,6 +747,42 @@ def get_global_challenges():
             cur.execute("SELECT challenges FROM sp2globalchallenges")
             value = cur.fetchone()
             return value[0] if value is not None else []
+
+def ensure_random_challenges_db():
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Create random challenges table
+            cur.execute("CREATE TABLE IF NOT EXISTS sp2randomchallenges (id SERIAL PRIMARY KEY, challenge INT)")
+            conn.commit()
+
+def get_all_random_challenges():
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the global challenges from the table
+            cur.execute("SELECT * FROM sp2randomchallenges")
+            value = cur.fetchone()
+            return value if value is not None else None
+
+def set_team_random_challenge(team, challenge):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Set the team random challenge
+            cur.execute("UPDATE sp2teams SET random_challenge = %s WHERE team = %s", (challenge, team))
+            conn.commit()
+
+def set_team_is_doing_random_challenge(team):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Set the team to be doing a random challenge
+            cur.execute("UPDATE sp2teams SET is_on_random_tile = true WHERE team = %s", (team, ))
+            conn.commit()
+
+def set_team_is_not_doing_random_challenge(team):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Set the team to not be doing a random challenge
+            cur.execute("UPDATE sp2teams SET is_on_random_tile = false WHERE team = %s", (team, ))
+            conn.commit()
 
 # def ensure_teams_table():
 #   with dbpool.connection() as conn:
