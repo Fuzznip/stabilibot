@@ -51,7 +51,11 @@ class Progress(commands.Cog):
             # Add the task to the embed
             print(f"Get { ' OR '.join(triggerList) }")
             print(f"{self.get_progress(team, challenge, task)} / {db.get_task_quantity(task)}")
-            challenge_embed.add_field(name = "Get " + " OR ".join(triggerList), value = f"{self.get_progress(team, challenge, task)} / {db.get_task_quantity(task)}", inline = False)
+            fieldName = "Get " + " OR ".join(triggerList)
+            # Clamp the field name to 256 characters
+            if len(fieldName) > 256:
+                fieldName = fieldName[:253] + "..."
+            challenge_embed.add_field(name = fieldName, value = f"{self.get_progress(team, challenge, task)} / {db.get_task_quantity(task)}", inline = False)
         # Add the embed to the list of embeds
         embeds.append(challenge_embed)
 
