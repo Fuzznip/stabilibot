@@ -139,7 +139,7 @@ def ensure_global_challenges_list_db():
     with dbpool.connection() as conn:
         with conn.cursor() as cur:
             # Create global challenges list table
-            cur.execute("CREATE TABLE IF NOT EXISTS sp2globalchallenges (id SERIAL PRIMARY KEY, challenges INT[])")
+            cur.execute("CREATE TABLE IF NOT EXISTS sp2globalchallenges (id SERIAL PRIMARY KEY, challenges INT)")
             conn.commit()
 
 def ensure_items_db():
@@ -391,22 +391,6 @@ def get_previous_tile(team):
             value = cur.fetchone()
             return value[0] if value is not None else None
 
-def has_star(tile):
-    with dbpool.connection() as conn:
-        with conn.cursor() as cur:
-            # Check if the tile has a star
-            cur.execute("SELECT has_star FROM sp2tiles WHERE tile_id = %s", (tile, ))
-            value = cur.fetchone()
-            return value[0] if value is not None else False
-
-def has_item_shop(tile):
-    with dbpool.connection() as conn:
-        with conn.cursor() as cur:
-            # Check if the tile has an item shop
-            cur.execute("SELECT has_item_shop FROM sp2tiles WHERE tile_id = %s", (tile, ))
-            value = cur.fetchone()
-            return value[0] if value is not None else False
-
 def get_coins(team):
     with dbpool.connection() as conn:
         with conn.cursor() as cur:
@@ -476,14 +460,6 @@ def get_trigger_and_source(trigger):
             cur.execute("SELECT trigger, source FROM sp2triggers WHERE trigger_id = %s", (trigger, ))
             value = cur.fetchone()
             return value[0], value[1] if value is not None else None
-
-def get_tile_challenge(tile):
-    with dbpool.connection() as conn:
-        with conn.cursor() as cur:
-            # Get the tile from the table
-            cur.execute("SELECT task_challenge FROM sp2tiles WHERE tile_id = %s", (tile, ))
-            value = cur.fetchone()
-            return value[0] if value is not None else None
 
 def get_task_quantity(task):
     with dbpool.connection() as conn:
