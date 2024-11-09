@@ -117,7 +117,13 @@ class UseItem(commands.Cog):
             db.set_current_tile(team, position2)
             db.set_current_tile(selectedTeam, position1)
 
-            await interaction.followup.send(f"Swapped positions with team {db.get_team_name(selectedTeam)}!", ephemeral = False)
+            await interaction.followup.send(f"Swapped positions with team {db.get_team_name(selectedTeam)}!\n\nYou are now on tile {db.get_tile_name(position2)}.", ephemeral = False)
+
+            # Inform the other team that they swapped positions
+            # Get the text channel for the other team
+            otherTeam = db.get_text_channel(selectedTeam)
+            channel = (self.bot.get_channel(otherTeam) or await self.bot.fetch_channel(otherTeam))
+            await channel.send(f"Team {db.get_team_name(team)} swapped positions with you!\n\nYou are now on tile {db.get_tile_name(position1)}.")
 
             db.remove_item(team, item)
 
@@ -175,7 +181,13 @@ class UseItem(commands.Cog):
             db.set_stars(team, db.get_team_stars(team) + 1)
             db.set_stars(selectedTeam, db.get_team_stars(selectedTeam) - 1)
 
-            await interaction.followup.send(f"Swapped positions with team {db.get_team_name(selectedTeam)}!", ephemeral = False)
+            await interaction.followup.send(f"Stole a star from team {db.get_team_name(selectedTeam)}!\n\nYou now have {db.get_team_stars(team)} stars.", ephemeral = False)
+
+            # Inform the other team that they lost a star
+            # Get the text channel for the other team
+            otherTeam = db.get_text_channel(selectedTeam)
+            channel = (self.bot.get_channel(otherTeam) or await self.bot.fetch_channel(otherTeam))
+            await channel.send(f"Team {db.get_team_name(team)} stole a star from you!\n\nYou now have {db.get_team_stars(selectedTeam)} stars.")
 
             db.remove_item(team, item)
 
@@ -211,12 +223,24 @@ class UseItem(commands.Cog):
                 db.set_coins(team, db.get_team_coins(team) + 50)
                 db.set_coins(selectedTeam, db.get_team_coins(selectedTeam) - 50)
 
-                await interaction.followup.send(f"Stole 50 coins from team {db.get_team_name(selectedTeam)}!", ephemeral = False)
+                await interaction.followup.send(f"Stole 50 coins from team {db.get_team_name(selectedTeam)}!\n\nYou now have {db.get_team_coins(team)} coins.", ephemeral = False)
+
+                # Inform the other team that they lost a star
+                # Get the text channel for the other team
+                otherTeam = db.get_text_channel(selectedTeam)
+                channel = (self.bot.get_channel(otherTeam) or await self.bot.fetch_channel(otherTeam))
+                await channel.send(f"Team {db.get_team_name(team)} stole 50 coins from you!\n\nYou now have {db.get_team_coins(selectedTeam)} coins.")
             else:
                 db.set_coins(team, db.get_team_coins(team) + enemyCoins)
                 db.set_coins(selectedTeam, 0)
 
                 await interaction.followup.send(f"Stole {enemyCoins} coins from team {db.get_team_name(selectedTeam)}!", ephemeral = False)
+
+                # Inform the other team that they lost a star
+                # Get the text channel for the other team
+                otherTeam = db.get_text_channel(selectedTeam)
+                channel = (self.bot.get_channel(otherTeam) or await self.bot.fetch_channel(otherTeam))
+                await channel.send(f"Team {db.get_team_name(team)} stole all of your coins!\n\nYou now have 0 coins.")
             
             db.remove_item(team, item)
 
@@ -230,6 +254,7 @@ class UseItem(commands.Cog):
         # Ask the user if they wish to spend 100 coins
         # Create a view with two buttons, one for yes and one for no
         async def yes(interaction: discord.Interaction):
+            await interaction.response.defer()
             if db.get_team_coins(team) >= 100:
                 db.set_coins(team, db.get_team_coins(team) - 100)
                 db.set_team_ready_to_roll(team)
@@ -242,9 +267,19 @@ class UseItem(commands.Cog):
                 await interaction.followup.send("You spent 100 coins and can now roll again!", ephemeral = False)
                 db.remove_item(team, item)
             else:
-                await interaction.followup.send("You do not have enough coins to use this item!", ephemeral = False)
+                db.set_coins(team, 0)
+                db.set_team_ready_to_roll(team)
+                db.set_team_not_rolling(team)
+
+                db.set_main_die_side(team, 4)
+                db.set_main_die_modifier(team, 0)
+                db.set_extra_die_sides(team, [])
+
+                await interaction.followup.send("You spent all of your coins and can now roll again!", ephemeral = False)
+                db.remove_item(team, item)
 
         async def no(interaction: discord.Interaction):
+            await interaction.response.defer()
             await interaction.followup.send("You decided to not use the item.", ephemeral = False)
 
         yesButton = discord.ui.Button(label = "Yes", style = discord.ButtonStyle.success)
@@ -257,13 +292,14 @@ class UseItem(commands.Cog):
         view.add_item(yesButton)
         view.add_item(noButton)
 
-        await interaction.followup.send("Are you sure you want to spend 100 coins to complete the current tile?", view = view)
+        await interaction.followup.send("Are you sure you want to spend up to 100 coins to complete the current tile?", view = view)
 
     async def use_reroll_global_challenge(self, interaction: discord.Interaction, team, item):
         print(f"Using reroll global challenge for team {team}")
 
         # Get all the global challenges from the database
-        challenges = db.get_global_challenges()
+        challenges = [66, 67, 68, 62, 64, 72, 73, 74]
+        print(challenges)
 
         # Get the current global challenge
         currentChallenge = db.get_global_challenge()
@@ -273,12 +309,13 @@ class UseItem(commands.Cog):
 
         db.set_global_challenge(currentChallenge)
         await interaction.followup.send(f"Rerolled the global challenge! Your new challenge is: {db.get_challenge_name(currentChallenge)}", ephemeral = False)
-        db.remove_item(team, item)
+        # db.remove_item(team, item)
 
     def __init__(self, bot: discord.Bot):
         self.bot = bot
         # Ensure any databases that we need exist
         db.ensure_items_db()
+        db.ensure_global_challenges_list_db()
 
         self.styleDictionary = {
             "primary": discord.ButtonStyle.primary,

@@ -740,11 +740,11 @@ def add_team_modifier(team, modifier):
 def get_global_challenges():
     with dbpool.connection() as conn:
         with conn.cursor() as cur:
-            # Get the global challenges from the table
-            # Return challenges from all rows
-            cur.execute("SELECT challenges FROM sp2globalchallenges")
+            # Select all of the global challenges where id is not 0
+            cur.execute("SELECT * FROM sp2globalchallenges WHERE id != 0")
             value = cur.fetchone()
-            return value[0] if value is not None else []
+            print(value)
+            return value if value is not None else None
 
 def ensure_random_challenges_db():
     with dbpool.connection() as conn:
@@ -781,6 +781,14 @@ def set_team_is_not_doing_random_challenge(team):
             # Set the team to not be doing a random challenge
             cur.execute("UPDATE sp2teams SET is_on_random_tile = false WHERE team = %s", (team, ))
             conn.commit()
+
+def get_text_channel(team):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the team from the table
+            cur.execute("SELECT text_channel_id FROM sp2teams WHERE team = %s", (team, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else None
 
 # def ensure_teams_table():
 #   with dbpool.connection() as conn:
