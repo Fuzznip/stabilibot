@@ -111,7 +111,7 @@ class Board(commands.Cog):
             x = int(star_position[1:star_position.index(",")])
             y = int(star_position[star_position.index(",") + 1:-1])
 
-            if star in tile_indices:
+            if star not in tile_indices:
                 self.paste_with_drop_shadow(board, star_icon, (int(x - self.iconSize / 2), int(y - self.iconSize / 2)))
             # Add the star to the board
             else:
@@ -131,7 +131,7 @@ class Board(commands.Cog):
 
             print(item_shop, tile_indices)
             # Add the item shop to the board
-            if item_shop in tile_indices:
+            if item_shop not in tile_indices:
                 self.paste_with_drop_shadow(board, item_shop_icon, (int(x - self.iconSize / 2), int(y - self.iconSize / 2)))
             else:
                 self.paste_with_drop_shadow(board, item_shop_icon, (int(x - self.iconSize / 2), int(y - self.iconSize / 2 - self.iconPadding - self.tileModifierPadding)))
