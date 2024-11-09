@@ -104,8 +104,11 @@ class Board(commands.Cog):
             x = int(star_position[1:star_position.index(",")])
             y = int(star_position[star_position.index(",") + 1:-1])
 
+            if star in tiles:
+                self.paste_with_drop_shadow(board, star_icon, (int(x - self.iconSize / 2), int(y - self.iconSize / 2 - self.iconPadding)))
             # Add the star to the board
-            self.paste_with_drop_shadow(board, star_icon, (int(x - self.iconSize / 2), int(y - self.iconSize / 2 - self.iconPadding - self.tileModifierPadding)))
+            else:
+                self.paste_with_drop_shadow(board, star_icon, (int(x - self.iconSize / 2), int(y - self.iconSize / 2 - self.iconPadding - self.tileModifierPadding)))
 
         item_shop_image = "item_shop.png"
         # Get the item shop positions
@@ -120,7 +123,10 @@ class Board(commands.Cog):
             y = int(item_shop_position[item_shop_position.index(",") + 1:-1])
 
             # Add the item shop to the board
-            self.paste_with_drop_shadow(board, item_shop_icon, (int(x - self.iconSize / 2), int(y - self.iconSize / 2 - self.iconPadding - self.tileModifierPadding)))
+            if item_shop in tiles:
+                self.paste_with_drop_shadow(board, item_shop_icon, (int(x - self.iconSize / 2), int(y - self.iconSize / 2 - self.iconPadding)))
+            else:
+                self.paste_with_drop_shadow(board, item_shop_icon, (int(x - self.iconSize / 2), int(y - self.iconSize / 2 - self.iconPadding - self.tileModifierPadding)))
 
         # Send the board image
         # Save the board image
