@@ -33,6 +33,7 @@ from cogs.sp2.roll import Roll
 from cogs.sp2.progress import Progress
 from cogs.sp2.board import Board
 from cogs.sp2.use_item import UseItem
+from cogs.sp2.standings import Standings
 
 class Stabilibot(commands.Bot):
   def __init__(self):
@@ -82,4 +83,5 @@ bot.add_cog(Roll(bot))
 bot.add_cog(Progress(bot))
 bot.add_cog(Board(bot))
 bot.add_cog(UseItem(bot))
+bot.add_cog(Standings(bot))
 bot.run(os.getenv("TOKEN"))
