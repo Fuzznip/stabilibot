@@ -16,7 +16,6 @@ class Progress(commands.Cog):
 
     def get_progress(self, team, challenge, task):
         progress = db.get_progress(team)
-        print(progress)
         if progress is None:
             return 0
 
@@ -49,8 +48,6 @@ class Progress(commands.Cog):
                     triggerList.append(f"{trigger} from {source}")
 
             # Add the task to the embed
-            print(f"Get { ' OR '.join(triggerList) }")
-            print(f"{self.get_progress(team, challenge, task)} / {db.get_task_quantity(task)}")
             fieldName = "Get " + " OR ".join(triggerList)
             # Clamp the field name to 256 characters
             if len(fieldName) > 256:

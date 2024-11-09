@@ -100,6 +100,7 @@ class Board(commands.Cog):
         star_icon = star_icon.resize((self.iconSize, self.iconSize))
         for star in stars:
             # Get the star's position
+            print(star, tiles)
             star_position = db.get_tile_position(star)
             x = int(star_position[1:star_position.index(",")])
             y = int(star_position[star_position.index(",") + 1:-1])
@@ -122,6 +123,7 @@ class Board(commands.Cog):
             x = int(item_shop_position[1:item_shop_position.index(",")])
             y = int(item_shop_position[item_shop_position.index(",") + 1:-1])
 
+            print(item_shop, tiles)
             # Add the item shop to the board
             if item_shop in tiles:
                 self.paste_with_drop_shadow(board, item_shop_icon, (int(x - self.iconSize / 2), int(y - self.iconSize / 2)))
