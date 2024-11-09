@@ -61,6 +61,8 @@ class Board(commands.Cog):
         board = Image.open(board_path).convert("RGBA")
         # Create a dictionary where the key is a tile and the value is the array of teams on that tile
         tiles = {}
+        tile_indices = []
+
         for team in teams:
             tile = team[3]
             if tile in tiles:
@@ -71,6 +73,10 @@ class Board(commands.Cog):
                 tiles[tile].insert(i, team)
             else:
                 tiles[tile] = [team]
+
+        # Add tiles that teams are on to the tile_indices list
+        for tile, teams in tiles.items():
+            tile_indices.append(tile)
         
         for tile, teams in tiles.items():
             numOfTeamsOnTile = len(teams)
@@ -100,12 +106,12 @@ class Board(commands.Cog):
         star_icon = star_icon.resize((self.iconSize, self.iconSize))
         for star in stars:
             # Get the star's position
-            print(star, tiles)
+            print(star, tile_indices)
             star_position = db.get_tile_position(star)
             x = int(star_position[1:star_position.index(",")])
             y = int(star_position[star_position.index(",") + 1:-1])
 
-            if star in tiles:
+            if star in tile_indices:
                 self.paste_with_drop_shadow(board, star_icon, (int(x - self.iconSize / 2), int(y - self.iconSize / 2)))
             # Add the star to the board
             else:
@@ -123,9 +129,9 @@ class Board(commands.Cog):
             x = int(item_shop_position[1:item_shop_position.index(",")])
             y = int(item_shop_position[item_shop_position.index(",") + 1:-1])
 
-            print(item_shop, tiles)
+            print(item_shop, tile_indices)
             # Add the item shop to the board
-            if item_shop in tiles:
+            if item_shop in tile_indices:
                 self.paste_with_drop_shadow(board, item_shop_icon, (int(x - self.iconSize / 2), int(y - self.iconSize / 2)))
             else:
                 self.paste_with_drop_shadow(board, item_shop_icon, (int(x - self.iconSize / 2), int(y - self.iconSize / 2 - self.iconPadding - self.tileModifierPadding)))

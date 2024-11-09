@@ -662,10 +662,8 @@ def get_tile_position(tile):
     with dbpool.connection() as conn:
         with conn.cursor() as cur:
             # Get the tile from the table
-            print(tile)
             cur.execute("SELECT position FROM sp2tiles WHERE tile_id = %s", (tile, ))
             value = cur.fetchone()
-            print(value)
             return value[0] if value is not None else None
 
 def get_star_tiles():
