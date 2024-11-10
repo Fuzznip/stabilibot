@@ -309,7 +309,7 @@ class UseItem(commands.Cog):
 
         db.set_global_challenge(currentChallenge)
         await interaction.followup.send(f"Rerolled the global challenge! Your new challenge is: {db.get_challenge_name(currentChallenge)}", ephemeral = False)
-        # db.remove_item(team, item)
+        db.remove_item(team, item)
 
     def __init__(self, bot: discord.Bot):
         self.bot = bot
