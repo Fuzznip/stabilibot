@@ -256,7 +256,7 @@ class UseItem(commands.Cog):
         async def yes(interaction: discord.Interaction):
             await interaction.response.defer()
             if db.get_team_coins(team) >= 100:
-                db.set_coins(team, db.get_team_coins(team) - 100)
+                db.set_coins(team, db.get_team_coins(team) - 100 + 10)
                 db.set_team_ready_to_roll(team)
                 db.set_team_not_rolling(team)
 
@@ -264,10 +264,10 @@ class UseItem(commands.Cog):
                 db.set_main_die_modifier(team, 0)
                 db.set_extra_die_sides(team, [])
 
-                await interaction.followup.send("You spent 100 coins and can now roll again!", ephemeral = False)
+                await interaction.followup.send("You spent 100 coins, gained 10 from completing the tile, and can now roll again!", ephemeral = False)
                 db.remove_item(team, item)
             else:
-                db.set_coins(team, 0)
+                db.set_coins(team, 10)
                 db.set_team_ready_to_roll(team)
                 db.set_team_not_rolling(team)
 
@@ -275,7 +275,7 @@ class UseItem(commands.Cog):
                 db.set_main_die_modifier(team, 0)
                 db.set_extra_die_sides(team, [])
 
-                await interaction.followup.send("You spent all of your coins and can now roll again!", ephemeral = False)
+                await interaction.followup.send("You spent all of your coins to complete the tile, gained 10 from completing the tile, and can now roll again!", ephemeral = False)
                 db.remove_item(team, item)
 
         async def no(interaction: discord.Interaction):
