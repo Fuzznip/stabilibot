@@ -358,7 +358,7 @@ class Roll(commands.Cog):
                         randomItems.append(item)
                         break
 
-            return [(item[6], item[1], item[0]) for item in randomItems]
+            return [(item[6], item[1], item[0], item[2]) for item in randomItems]
 
         def add_buttons(self):
             async def view_shop(interaction: discord.Interaction):
@@ -373,8 +373,8 @@ class Roll(commands.Cog):
                 await interaction.edit_original_response(view = self)
                 itemsView = self.ItemsPurchaseView(self.team, self.total_roll, self.move_team_forward)
                 shopItems = "The shop has the following items:\n"
-                for price, itemName, id in self.get_random_shop_items():
-                    shopItems += f"{itemName} for {price} coins\n"
+                for price, itemName, id, description in self.get_random_shop_items():
+                    shopItems += f"{itemName} for {price} coins: {description}\n"
                     itemsView.add_purchasable_item(price, itemName, id)
                 itemsView.add_close_shop_button()
                 await interaction.followup.send(shopItems, ephemeral = False, view = itemsView)
