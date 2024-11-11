@@ -298,7 +298,7 @@ class UseItem(commands.Cog):
         print(f"Using reroll global challenge for team {team}")
 
         # Get all the global challenges from the database
-        challenges = [73, 79, 80, 86, 89, 90, 91]
+        challenges = [73, 79, 80, 89, 91]
         print(challenges)
 
         # Get the current global challenge
@@ -309,6 +309,16 @@ class UseItem(commands.Cog):
 
         db.set_global_challenge(currentChallenge)
         await interaction.followup.send(f"Rerolled the global challenge! Your new challenge is: {db.get_challenge_name(currentChallenge)}", ephemeral = False)
+        
+        # Message all of the teams except the team that used the item
+        for otherTeam in db.get_team_names():
+            if otherTeam != db.get_team_name(team):
+                # Get the text channel for the other team
+                otherTeamId = db.get_team_id(otherTeam)
+                otherTeamChannel = db.get_text_channel(otherTeamId)
+                channel = (self.bot.get_channel(otherTeamChannel) or await self.bot.fetch_channel(otherTeamChannel))
+                await channel.send(f"Team {db.get_team_name(team)} rerolled the global challenge! Your new challenge is: {db.get_challenge_name(currentChallenge)}.")
+
         db.remove_item(team, item)
 
     def __init__(self, bot: discord.Bot):
