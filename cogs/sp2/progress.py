@@ -21,6 +21,44 @@ class Progress(commands.Cog):
 
         return progress[str(challenge)][str(task)] if str(challenge) in progress and str(task) in progress[str(challenge)] else 0
 
+    def add_locked_progress_embed(self, challenge_type, embeds, team, challenge):
+        # Get the challenge name and description
+        challenge_name = db.get_challenge_name(challenge)
+        challenge_description = db.get_challenge_description(challenge)
+        # Create the embed
+        challenge_embed = discord.Embed(title = f"{ challenge_type } Challenge: COMPLETED", description = challenge_description)
+        # Get the tasks for the challenge
+        tasks = db.get_challenge_tasks(challenge)
+        # Add the tasks to the embed
+        for task in tasks:
+            # Get the triggers for the task
+            triggers = db.get_task_triggers(task)
+            triggerList = []
+            for trigger in triggers:
+                # Get the trigger and the source
+                trigger, source = db.get_trigger_and_source(trigger)
+                # If the source is empty, this is a general trigger
+                if source is None:
+                    triggerList.append(trigger)
+                # If the trigger and source are the same, this is a KC trigger
+                elif trigger == source:
+                    triggerList.append(trigger + " KC")
+                # If the trigger and source are different, this is a specific source trigger
+                else:
+                    triggerList.append(f"{trigger} from {source}")
+
+            # Add the task to the embed
+            fieldName = "Get " + " OR ".join(triggerList)
+            # Clamp the field name to 256 characters
+            if len(fieldName) > 256:
+                fieldName = fieldName[:253] + "..."
+            challenge_embed.add_field(name = fieldName, value = f"{self.get_progress(team, challenge, task)} / {db.get_task_quantity(task)}", inline = False)
+        # Add the embed to the list of embeds
+        iconUrl = "https://i.imgur.com/Niti61N.png"
+        challenge_embed.set_thumbnail(url = iconUrl)
+        challenge_embed.add_field(name = "This challenge is complete!", value = "You have completed this challenge twice and can no longer receive rewards until your next roll!", inline = False)
+        embeds.append(challenge_embed)
+
     def add_progress_embed(self, challenge_type, embeds, team, challenge):
         # Get the challenge name and description
         challenge_name = db.get_challenge_name(challenge)
@@ -71,7 +109,6 @@ class Progress(commands.Cog):
 
         # Get the team's current tile
         tile = db.get_team_tile(team_id)
-
         # Get the team's current stars
         stars = db.get_team_stars(team_id)
         # Get the team's current coins
@@ -110,7 +147,10 @@ class Progress(commands.Cog):
 
         embeds = []
         if coin_challenge != -1:
-            self.add_progress_embed("Coin", embeds, team_id, coin_challenge)
+            if db.get_coins_gained_this_tile(team_id) >= 10:
+                self.add_locked_progress_embed("Coin", embeds, team_id, coin_challenge)
+            else:
+                self.add_progress_embed("Coin", embeds, team_id, coin_challenge)
         if tile_challenge != -1:
             self.add_progress_embed("Tile", embeds, team_id, tile_challenge)
         if region_challenge != -1:

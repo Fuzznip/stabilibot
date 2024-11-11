@@ -790,6 +790,14 @@ def get_text_channel(team):
             value = cur.fetchone()
             return value[0] if value is not None else None
 
+def get_coins_gained_this_tile(team):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get the team from the table
+            cur.execute("SELECT coins_gained_this_tile FROM sp2teams WHERE team = %s", (team, ))
+            value = cur.fetchone()
+            return value[0] if value is not None else 0
+
 # def ensure_teams_table():
 #   with dbpool.connection() as conn:
 #     with conn.cursor() as cur:
