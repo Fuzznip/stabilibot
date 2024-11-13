@@ -298,7 +298,7 @@ class UseItem(commands.Cog):
         print(f"Using reroll global challenge for team {team}")
 
         # Get all the global challenges from the database
-        challenges = [73, 79, 80, 89, 91]
+        challenges = [95, 97, 98, 78, 90]
         print(challenges)
 
         # Get the current global challenge
