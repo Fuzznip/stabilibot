@@ -241,3 +241,26 @@ class ForceResetNotRolling(commands.Cog):
         db.set_team_not_rolling(team_id)
 
         await interaction.followup.send(f"{team_name} is now progressing their tile", ephemeral = True)
+
+class SetTeamTile(commands.Cog):
+    def __init__(self, bot: discord.Bot):
+        self.bot = bot
+        # Ensure any databases that we need exist
+
+    @commands.has_role("Staff") # Double check roles
+    @discord.slash_command(name = "set_team_tile", description = "Sets the team's current tile", guild_ids = [int(os.getenv("GUILD_ID"))])
+    async def set_team_tile(self, interaction, team_name: str, tile_id: int):
+        # Log the command
+        print(f"{interaction.author.nick if interaction.author.nick is not None else interaction.user.name}: /set_team_tile {team_name} {tile_id}")
+        # Defer the response
+        await interaction.response.defer()
+
+        # Get the team ID
+        team_id = db.get_team_id(team_name)
+        if team_id is None:
+            await interaction.followup.send("Team name doesn't exist. Double check spelling", ephemeral = True)
+            return
+
+        db.set_current_tile(team_id, tile_id)
+
+        await interaction.followup.send(f"{team_name}'s tile has been set to {tile_id}", ephemeral = True)

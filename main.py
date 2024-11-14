@@ -34,7 +34,7 @@ from cogs.sp2.progress import Progress
 from cogs.sp2.board import Board
 from cogs.sp2.use_item import UseItem
 from cogs.sp2.standings import Standings
-from cogs.sp2.progress_team import CompleteCoin, CompleteTile, CompleteRegion, CompleteGlobal, ForceResetRolling, ForceResetNotRolling
+from cogs.sp2.progress_team import CompleteCoin, CompleteTile, CompleteRegion, CompleteGlobal, ForceResetRolling, ForceResetNotRolling, SetTeamTile
 
 class Stabilibot(commands.Bot):
   def __init__(self):
@@ -91,4 +91,5 @@ bot.add_cog(CompleteRegion(bot))
 bot.add_cog(CompleteGlobal(bot))
 bot.add_cog(ForceResetRolling(bot))
 bot.add_cog(ForceResetNotRolling(bot))
+bot.add_cog(SetTeamTile(bot))
 bot.run(os.getenv("TOKEN"))
