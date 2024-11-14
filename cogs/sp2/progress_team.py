@@ -194,3 +194,50 @@ class CompleteGlobal(commands.Cog):
 
         await interaction.followup.send(f"Global challenge completed for {team_name}. They are ready to roll with a 12-sided die.\n\nAn enchanted crystal ball has been added to their inventory as well. YOU MUST IMMEDIATELY USE THIS ITEM TO ROLL A NEW GLOBAL CHALLENGE BECAUSE IM TOO LAZY TO CODE IT UP ON MY END THANKS", ephemeral = True)
 
+class ForceResetRolling(commands.Cog):
+    def __init__(self, bot: discord.Bot):
+        self.bot = bot
+        # Ensure any databases that we need exist
+
+    @commands.has_role("Staff") # Double check roles
+    @discord.slash_command(name = "force_reset_rolling", description = "Forces a team to be able to roll again", guild_ids = [int(os.getenv("GUILD_ID"))])
+    async def force_reset_rolling(self, interaction, team_name: str):
+        # Log the command
+        print(f"{interaction.author.nick if interaction.author.nick is not None else interaction.user.name}: /force_reset_rolling {team_name}")
+        # Defer the response
+        await interaction.response.defer()
+
+        # Get the team ID
+        team_id = db.get_team_id(team_name)
+        if team_id is None:
+            await interaction.followup.send("Team name doesn't exist. Double check spelling", ephemeral = True)
+            return
+
+        db.set_team_ready_to_roll(team_id)
+        db.set_team_not_rolling(team_id)
+
+        await interaction.followup.send(f"{team_name} is now able to roll again", ephemeral = True)
+
+class ForceResetNotRolling(commands.Cog):
+    def __init__(self, bot: discord.Bot):
+        self.bot = bot
+        # Ensure any databases that we need exist
+
+    @commands.has_role("Staff") # Double check roles
+    @discord.slash_command(name = "force_reset_not_rolling", description = "Forces a team to not be able to roll again", guild_ids = [int(os.getenv("GUILD_ID"))])
+    async def force_reset_not_rolling(self, interaction, team_name: str):
+        # Log the command
+        print(f"{interaction.author.nick if interaction.author.nick is not None else interaction.user.name}: /force_reset_not_rolling {team_name}")
+        # Defer the response
+        await interaction.response.defer()
+
+        # Get the team ID
+        team_id = db.get_team_id(team_name)
+        if team_id is None:
+            await interaction.followup.send("Team name doesn't exist. Double check spelling", ephemeral = True)
+            return
+
+        db.set_team_not_ready_to_roll(team_id)
+        db.set_team_not_rolling(team_id)
+
+        await interaction.followup.send(f"{team_name} is now progressing their tile", ephemeral = True)
