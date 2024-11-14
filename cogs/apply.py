@@ -20,7 +20,6 @@ class ApplicationModal(ui.Modal):
     self.add_item(self.questionRecruitmentMethod)
     self.add_item(self.questionReasonForJoining)
     self.add_item(self.questionInGameGoals)
-    db.ensure_user_db()
 
   async def callback(self, interaction: discord.Interaction) -> None:
     try:
@@ -87,7 +86,7 @@ class ApplicationModal(ui.Modal):
         except Exception as add_user_error:
           print(f"Error linking user to OSRS username in db: {add_user_error}")
 
-        await interaction.followup.send("Application submitted!", ephemeral = True)
+        await interaction.followup.send("Application submitted! You have been given the **Applied** role and now have access to most of the discord. Please allow staff up to a week to review your application and of course feel free to guest in the in-game cc \"Stability\" to introduce yourself and familiarize yourself with the environment.", ephemeral = True)
       else:
         await interaction.followup.send("Error fetching player data - double check the spelling of your OSRS username and then contact Staff if issue persists.", ephemeral = True)
       await womClient.close()

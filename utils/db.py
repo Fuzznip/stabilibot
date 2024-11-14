@@ -262,6 +262,14 @@ def remove_user_from_team(discordId):
             cur.execute("DELETE FROM sp2users WHERE discord_id = %s", (discordId, ))
             conn.commit()
 
+def save_progress(team, progress):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Save the progress to the team
+            cur.execute("UPDATE sp2teams SET progress = %s WHERE team = %s", (Jsonb(progress), team))
+            conn.commit()
+
+
 def get_all_users():
     with dbpool.connection() as conn:
         with conn.cursor() as cur:
@@ -414,6 +422,13 @@ def set_coins(team, coins):
             cur.execute("UPDATE sp2teams SET coins = %s WHERE team = %s", (coins, team))
             conn.commit()
 
+def set_coins_gained_this_tile(team, coins):
+    with dbpool.connection() as conn:
+        with conn.cursor() as cur:
+            # Set the coins gained this tile for the team
+            cur.execute("UPDATE sp2teams SET coins_gained_this_tile = %s WHERE team = %s", (coins, team))
+            conn.commit()
+
 def get_stars(team):
     with dbpool.connection() as conn:
         with conn.cursor() as cur:
@@ -491,7 +506,7 @@ def get_team_stars(team):
             # Get the team from the table
             cur.execute("SELECT stars FROM sp2teams WHERE team = %s", (team, ))
             value = cur.fetchone()
-            return value[0] if value is not None else None
+            return value[0] if value is not None else 0
 
 def get_team_coins(team):
     with dbpool.connection() as conn:
@@ -499,7 +514,7 @@ def get_team_coins(team):
             # Get the team from the table
             cur.execute("SELECT coins FROM sp2teams WHERE team = %s", (team, ))
             value = cur.fetchone()
-            return value[0] if value is not None else None
+            return value[0] if value is not None else 0
 
 def get_team_items(team):
     with dbpool.connection() as conn:

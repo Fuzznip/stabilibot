@@ -251,6 +251,12 @@ class UseItem(commands.Cog):
 
     async def use_deaths_coffer(self, interaction: discord.Interaction, team, item):
         print(f"Using deaths coffer for team {team}")
+
+        # Check if team is not ready to roll or is currently rolling
+        if db.is_team_ready_to_roll(team) or db.is_team_rolling(team):
+            await interaction.followup.send("This item may only be used when you are progressing through a tile!", ephemeral = False)
+            return
+
         # Ask the user if they wish to spend 100 coins
         # Create a view with two buttons, one for yes and one for no
         async def yes(interaction: discord.Interaction):
@@ -298,7 +304,7 @@ class UseItem(commands.Cog):
         print(f"Using reroll global challenge for team {team}")
 
         # Get all the global challenges from the database
-        challenges = [95, 97, 98, 78, 90]
+        challenges = [79, 97, 98, 99, 90, 100]
         print(challenges)
 
         # Get the current global challenge
@@ -318,6 +324,92 @@ class UseItem(commands.Cog):
                 otherTeamChannel = db.get_text_channel(otherTeamId)
                 channel = (self.bot.get_channel(otherTeamChannel) or await self.bot.fetch_channel(otherTeamChannel))
                 await channel.send(f"Team {db.get_team_name(team)} rerolled the global challenge! Your new challenge is: {db.get_challenge_name(currentChallenge)}.")
+
+        db.remove_item(team, item)
+
+    class StarView(discord.ui.View):
+        def __init__(self, team, remaining_distance):
+            super().__init__(timeout = None)
+            self.team = team
+            self.remaining_distance = remaining_distance
+            self.add_buttons()
+
+            print(f"Team {team} is at a star!")
+
+        def add_buttons(self):
+            if db.get_coins(self.team) < 100:
+                async def yes(interaction: discord.Interaction):
+                    print(f"User {interaction.user.name} does not have enough coins to buy a star!")
+                    # make sure the interaction author is in the team
+                    if db.get_team(str(interaction.user.id)) != self.team:
+                        return
+
+                    # Remove the buttons
+                    self.clear_items()
+                    await interaction.response.defer()
+                    await interaction.edit_original_response(view = self)
+                    await interaction.followup.send("You don't have enough coins to buy a star!", ephemeral = False)
+
+                button1 = discord.ui.Button(label = "Not Enough Coins!", style = discord.ButtonStyle.green, disabled = True)
+            else:
+                async def yes(interaction: discord.Interaction):
+                    print(f"User {interaction.user.name} bought a star!")
+                    # make sure the interaction author is in the team
+                    if db.get_team(str(interaction.user.id)) != self.team:
+                        return
+
+                    # Remove the buttons
+                    self.clear_items()
+                    await interaction.response.defer()
+                    await interaction.edit_original_response(view = self)
+                    db.set_coins(self.team, db.get_coins(self.team) - 100)
+                    db.set_stars(self.team, db.get_stars(self.team) + 1)
+                    # Move the star to a random tile on the board
+                    allTilePositions = db.get_tile_positions()
+                    tile = db.get_current_tile(self.team)
+                    while tile == db.get_current_tile(self.team) or db.has_star(tile) or db.has_item_shop(tile) or db.count_teams_on_tile(tile) != 0:
+                        tile = random.randint(1, len(allTilePositions) - 1)
+
+                    db.set_star(tile)
+                    db.unset_star(db.get_current_tile(self.team))
+                    await interaction.followup.send(f"Congratulations! You bought a star for 100 coins! You now have {db.get_coins(self.team)} coins and {db.get_stars(self.team)} stars!\nThe Star has now moved to tile {tile}: {db.get_tile_name(tile)}!", ephemeral = False)
+
+                button1 = discord.ui.Button(label = "Yes", style = discord.ButtonStyle.green)
+
+            async def no(interaction: discord.Interaction):
+                print(f"User {interaction.user.name} did not buy a star!")
+                # make sure the interaction author is in the team
+                if db.get_team(str(interaction.user.id)) != self.team:
+                    return
+
+                # Remove the buttons
+                self.clear_items()
+                await interaction.response.defer()
+                await interaction.edit_original_response(view = self)
+                await interaction.followup.send("You did not buy a star.", ephemeral = False)
+
+            button1.callback = yes
+
+            button2 = discord.ui.Button(label = "No", style = discord.ButtonStyle.red)
+            button2.callback = no
+
+            self.add_item(button1)
+            self.add_item(button2)
+
+    async def use_golden_teleport_tablet(self, interaction: discord.Interaction, team, item):
+        print(f"Using golden teleport tablet for team {team}")
+        # Get all of the tiles
+        tiles = db.get_star_tiles()
+        selectedTile = db.get_current_tile(team)
+        while selectedTile == db.get_current_tile(team):
+            selectedTile = tiles[random.randint(0, len(tiles) - 1)]
+
+        # Move the team to the selected tile
+        db.set_previous_tile(team, db.get_current_tile(team))
+        db.set_current_tile(team, selectedTile)
+
+        view = self.StarView(team, 0)
+        await interaction.followup.send(f"Teleported to tile {selectedTile}! Would you like to purchase a star for 100 coins?", view = view)
 
         db.remove_item(team, item)
 
@@ -354,7 +446,8 @@ class UseItem(commands.Cog):
             "11": self.use_steal_star,
             "12": self.use_deaths_coffer,
             "13": self.use_steal_coins,
-            "14": self.use_reroll_global_challenge
+            "14": self.use_reroll_global_challenge,
+            "15": self.use_golden_teleport_tablet
         }
 
     class ItemBarView(discord.ui.View):
