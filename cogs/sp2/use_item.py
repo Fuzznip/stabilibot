@@ -151,7 +151,8 @@ class UseItem(commands.Cog):
 
     async def use_double_coin(self, interaction: discord.Interaction, team, item):
         print(f"Using double coin for team {team}")
-        db.set_coins(team, db.get_team_coins(team) * 2)
+        # Doubles the coins, capped to 1000
+        db.set_coins(team, min(1000, db.get_team_coins(team) * 2))
 
         await interaction.followup.send(f"Doubled your coins! You now have {db.get_team_coins(team)} coins!", ephemeral = False)
         db.remove_item(team, item)
