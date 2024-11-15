@@ -152,9 +152,10 @@ class UseItem(commands.Cog):
     async def use_double_coin(self, interaction: discord.Interaction, team, item):
         print(f"Using double coin for team {team}")
         # Doubles the coins, capped to 1000
-        db.set_coins(team, min(1000, db.get_team_coins(team) * 2))
+        # db.set_coins(team, min(1000, db.get_team_coins(team) * 2))
 
-        await interaction.followup.send(f"Doubled your coins! You now have {db.get_team_coins(team)} coins!", ephemeral = False)
+        # await interaction.followup.send(f"Doubled your coins! You now have {db.get_team_coins(team)} coins!", ephemeral = False)
+        await interaction.followup.send("This item is currently disabled. Also it exploded and disappeared.", ephemeral = False)
         db.remove_item(team, item)
 
     async def use_steal_star(self, interaction: discord.Interaction, team, item):
@@ -305,7 +306,7 @@ class UseItem(commands.Cog):
         print(f"Using reroll global challenge for team {team}")
 
         # Get all the global challenges from the database
-        challenges = [79, 97, 98, 99, 90, 100]
+        challenges = [98, 99, 90, 100]
         print(challenges)
 
         # Get the current global challenge
