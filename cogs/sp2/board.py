@@ -45,6 +45,11 @@ class Board(commands.Cog):
         # Paste the image onto the base
         base.paste(image, position, image)
 
+    def paste_godrays(self, base, position):
+        godrays = Image.open(os.path.join(os.path.dirname(__file__), "../../images/godrays.png")).convert("RGBA")
+        godrays = godrays.resize((self.iconSize + 128, self.iconSize + 128))
+        base.paste(godrays, (position[0] - 64, position[1] - 64), godrays)
+
     @discord.slash_command(name = "board", description = "Views the current board", guild_ids = [int(os.getenv("GUILD_ID"))])
     async def board(self, interaction):
         # Log the command
@@ -59,12 +64,13 @@ class Board(commands.Cog):
         # Load the board image
         board_path = os.path.join(path, board_image)
         board = Image.open(board_path).convert("RGBA")
+        # darken the baord
         # Create a dictionary where the key is a tile and the value is the array of teams on that tile
         tiles = {}
         tile_indices = []
 
         for team in teams:
-            tile = team[3]
+            tile = team[4]
             if tile in tiles:
                 # Insert sorted by team number
                 i = 0
@@ -74,6 +80,8 @@ class Board(commands.Cog):
             else:
                 tiles[tile] = [team]
 
+        print(tiles)
+
         # Add tiles that teams are on to the tile_indices list
         for tile, teams in tiles.items():
             tile_indices.append(tile)
@@ -82,7 +90,7 @@ class Board(commands.Cog):
             numOfTeamsOnTile = len(teams)
             for i, team in enumerate(teams):
                 # Get the team's image name
-                team_image = team[17]
+                team_image = team[2]
                 position = db.get_tile_position(tile)
                 x = int(position[1:position.index(",")])
                 y = int(position[position.index(",") + 1:-1])
@@ -91,11 +99,13 @@ class Board(commands.Cog):
                 
                 # Add the team's image to the board at the tile's position
                 # load the team image
+                print(path, team_image)
                 final_image_path = os.path.join(path, team_image)
                 icon = Image.open(final_image_path).convert("RGBA")
                 # resize the image to 48x48
                 icon = icon.resize((self.iconSize, self.iconSize))
                 # paste the image onto the board
+                self.paste_godrays(board, finalPosition)
                 self.paste_with_drop_shadow(board, icon, finalPosition)
 
         star_image = "star.png"
@@ -136,7 +146,17 @@ class Board(commands.Cog):
             else:
                 self.paste_with_drop_shadow(board, item_shop_icon, (int(x - self.iconSize / 2), int(y - self.iconSize / 2 - self.iconPadding - self.tileModifierPadding)))
 
-        # Send the board image
+        # Crop the board around the team that used the command
+        # Get the team's position
+        team = db.get_team(str(interaction.author.id))
+        tile = db.get_team_tile(team)
+        position = db.get_tile_position(tile)
+        x = int(position[1:position.index(",")])
+        y = int(position[position.index(",") + 1:-1])
+
+        # Crop the board around the team
+        board = board.crop((x - 600, y - 600, x + 600, y + 600))
+
         # Save the board image
         board.save(os.path.join(path, "board_send.png"))
         await interaction.followup.send(file=discord.File(os.path.join(path, "board_send.png")))

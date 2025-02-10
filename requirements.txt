@@ -13,5 +13,5 @@ python-dotenv==1.0.1
 Requests==2.31.0
 typing_extensions==4.11.0
 tzdata==2024.1
-wom.py==1.0.1
+wom.py==2.0.1
 yarl==1.9.4
