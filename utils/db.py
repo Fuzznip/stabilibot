@@ -15,7 +15,7 @@ dbpool = ConnectionPool(conninfo = os.getenv("DATABASE_URL"))
 def ensure_user_db():
   with dbpool.connection() as conn:
     with conn.cursor() as cur:
-      cur.execute("CREATE TABLE IF NOT EXISTS users (discord_id text PRIMARY KEY, username text[])")
+      cur.execute("CREATE TABLE IF NOT EXISTS members (discord_id text PRIMARY KEY, username text[])")
       conn.commit()
 
 async def add_user(discordId, username):
@@ -27,23 +27,23 @@ async def add_user(discordId, username):
   with dbpool.connection() as conn:
     with conn.cursor() as cur:
       # First confirm that the username is not already linked to another discord account
-      cur.execute("SELECT * FROM users WHERE username @> %s", ([username], ))
+      cur.execute("SELECT * FROM members WHERE username @> %s", ([username], ))
       if cur.fetchone() is not None:
         return success
       
       # Get the user from the table
-      cur.execute("SELECT * FROM users WHERE discord_id = %s", (discordId, ))
+      cur.execute("SELECT * FROM members WHERE discord_id = %s", (discordId, ))
       # Check if the user exists
       val = cur.fetchone()
       if val is None:
         # If the user doesn't exist, add them to the table
-        cur.execute("INSERT INTO users (discord_id, username) VALUES (%s, %s)", (discordId, [username]))
+        cur.execute("INSERT INTO members (discord_id, username) VALUES (%s, %s)", (discordId, [username]))
       else:
         # Check if the username is already in the array
         if username in val[1]:
           return
         # If the username isn't in the array, add it
-        cur.execute("UPDATE users SET username = array_append(users.username, %s) WHERE discord_id = %s", (username, discordId))
+        cur.execute("UPDATE members SET username = array_append(members.username, %s) WHERE discord_id = %s", (username, discordId))
       conn.commit()
       success = True
 
@@ -57,12 +57,12 @@ async def remove_user(discordId, username):
   with dbpool.connection() as conn:
     with conn.cursor() as cur:
       # Check if the user has the username linked to their discord account
-      cur.execute("SELECT * FROM users WHERE discord_id = %s AND username @> %s", (discordId, [username]))
+      cur.execute("SELECT * FROM members WHERE discord_id = %s AND username @> %s", (discordId, [username]))
       if cur.fetchone() is None:
         return success
 
       # Remove the username from the array
-      cur.execute("UPDATE users SET username = array_remove(users.username, %s) WHERE discord_id = %s", (username, discordId))
+      cur.execute("UPDATE members SET username = array_remove(members.username, %s) WHERE discord_id = %s", (username, discordId))
       conn.commit()
       success = True
 
@@ -72,7 +72,7 @@ def get_users():
   with dbpool.connection() as conn:
     with conn.cursor() as cur:
       # Get all the users from the table
-      cur.execute("SELECT * FROM users")
+      cur.execute("SELECT * FROM members")
       values = cur.fetchall()
       return values
 
@@ -80,7 +80,7 @@ def get_user(discordId):
   with dbpool.connection() as conn:
     with conn.cursor() as cur:
       # Get the user from the table
-      cur.execute("SELECT username FROM users WHERE discord_id = %s", (discordId, ))
+      cur.execute("SELECT username FROM members WHERE discord_id = %s", (discordId, ))
       value = cur.fetchone()
       return value[0] if value is not None else None
 
@@ -88,7 +88,7 @@ def get_user_from_username(username):
   with dbpool.connection() as conn:
     with conn.cursor() as cur:
       # Get the user from the table
-      cur.execute("SELECT discord_id FROM users WHERE username @> %s", ([username], ))
+      cur.execute("SELECT discord_id FROM members WHERE username @> %s", ([username], ))
       value = cur.fetchone()
       return value[0] if value is not None else None
 
@@ -96,7 +96,7 @@ def get_users_from_id(discordId):
     with dbpool.connection() as conn:
         with conn.cursor() as cur:
             # Get the user from the table
-            cur.execute("SELECT username FROM users WHERE discord_id = %s", (discordId, ))
+            cur.execute("SELECT username FROM members WHERE discord_id = %s", (discordId, ))
             value = cur.fetchone()
             return value[0] if value is not None else None
 
