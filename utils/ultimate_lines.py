@@ -36,7 +36,6 @@ ultimate_lines = {
     "Behold, the God of Thunder!": "Thor",
     "We Are Venom!": "Venom",
     "Armed and Dangerous!": "Winter Soldier",
-    "Grunts": "Wolverine",
     "Rise, My Friends!": "Adam Warlock",
     "Bast, Grace Us With Victory!": "Black Panther",
     "Mind the Exploding Plasma.": "Black Widow",
@@ -73,5 +72,6 @@ ultimate_lines = {
     "I Am Asgard’s Might!": "Thor",
     "We Hunger!": "Venom",
     "Stand Down!": "Winter Soldier",
+    "Again!" : "Winter Soldier",
     "Berserker Rage!": "Wolverine"
 }

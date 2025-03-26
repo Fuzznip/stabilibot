@@ -22,6 +22,30 @@ class MessageListener(commands.Cog):
         def clean_text(text):
             return re.sub(r"[^a-zA-Z0-9\s]", "", text.lower())
 
+        # Define colors for specific characters
+        character_colors = {
+            "Adam Warlock": discord.Color.gold(),
+            "Black Panther": discord.Color.dark_gray(),
+            "Black Widow": discord.Color.red(),
+            "Captain America": discord.Color.blue(),
+            "Doctor Strange": discord.Color.purple(),
+            "Groot": discord.Color.green(),
+            "Hawkeye": discord.Color.orange(),
+            "Hela": discord.Color.dark_red(),
+            "Hero Hulk": discord.Color.dark_green(),
+            "Iron Man": discord.Color.dark_orange(),
+            "Loki": discord.Color.dark_purple(),
+            "Psylocke": discord.Color.purple(),
+            "Storm": discord.Color.blue(),
+            "Scarlet Witch": discord.Color.magenta(),
+            "Spider-Man": discord.Color.red(),
+            "Thor": discord.Color.light_gray(),
+            "The Punisher": discord.Color.dark_gray(),
+            "The Thing": discord.Color.orange(),
+            "Wolverine": discord.Color.gold(),
+            # ...add more characters and colors as needed...
+        }
+
         # Remove common words from the message
         message_words = set(word for word in clean_text(message.content).split() if word not in common_words)
         matching_lines = [
@@ -33,7 +57,8 @@ class MessageListener(commands.Cog):
         if matching_lines:
             selected_line = random.choice(matching_lines)
             character = ultimate_lines[selected_line]
-            embed = discord.Embed(title=selected_line,color=discord.Color.blue())
+            color = character_colors.get(character, discord.Color.default())  # Default color if character not found
+            embed = discord.Embed(title=selected_line, color=color)
             if character in character_images:
                 embed.set_thumbnail(url=character_images[character])
             await message.channel.send(embed=embed)
