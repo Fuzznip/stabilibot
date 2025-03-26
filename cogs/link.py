@@ -39,11 +39,11 @@ class Link(commands.Cog):
       await interaction.response.send_message("Failed to link the account. That account has already been linked.", ephemeral = True)
       return
 
-    usernames = db.get_user(str(interaction.author.id))
+    username = db.get_user(str(interaction.author.id))
 
     # if usernames is not empty
-    if usernames:
-      await interaction.response.send_message(f"Successfully linked {username} to your discord account. Your linked accounts are: {', '.join(usernames)}", ephemeral = True)
+    if username:
+      await interaction.response.send_message(f"Successfully linked {username} to your discord account. Your linked account is: {username}", ephemeral = True)
       return
 
-    await interaction.response.send_message(f"Successfully linked {username} to your discord account. You now have no linked accounts.", ephemeral = True)
+    await interaction.response.send_message(f"Successfully linked {username} to your discord account. You now have no linked accounts. ... Wait, what?", ephemeral = True)
