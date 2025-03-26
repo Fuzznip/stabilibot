@@ -12,7 +12,6 @@ import wom
 class AddLink(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        db.ensure_user_db()
         
     @commands.has_role("Staff")
     @discord.slash_command(name = "add_link", help = "Link an osrs account to a discord account", guild_ids = [int(os.getenv("GUILD_ID"))])
