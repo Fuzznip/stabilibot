@@ -18,23 +18,7 @@ from cogs.accounts import Accounts
 from cogs.link import Link
 from cogs.unlink import Unlink
 from cogs.add_link import AddLink
-# from cogs.tile_race.roll import Roll, RollTeam, MoveToTile
-# from cogs.tile_race.create_team import ViewTeams, ViewTeam, MyTeam, CreateTeam, DeleteTeam
-# from cogs.tile_race.add_player import AddPlayer, RemovePlayer
-# from cogs.tile_race.complete_tile import CompleteTile, AddCoins, SetStars
-# from cogs.tile_race.items import Items, AddItem
-
-from cogs.sp2.create_team import CreateTeam
-from cogs.sp2.delete_team import DeleteTeam
-from cogs.sp2.rename_team import RenameTeam
-from cogs.sp2.add_user import AddUser
-
-from cogs.sp2.roll import Roll
-from cogs.sp2.progress import Progress
-from cogs.sp2.board import Board
-from cogs.sp2.use_item import UseItem
-from cogs.sp2.standings import Standings
-from cogs.sp2.progress_team import CompleteCoin, CompleteTile, CompleteRegion, CompleteGlobal, ForceResetRolling, ForceResetNotRolling, SetTeamTile
+from cogs.message_listener import MessageListener
 
 class Stabilibot(commands.Bot):
   def __init__(self):
@@ -61,35 +45,7 @@ bot.add_cog(Accounts(bot))
 bot.add_cog(Link(bot))
 bot.add_cog(Unlink(bot))
 bot.add_cog(AddLink(bot))
-# bot.add_cog(Roll(bot))
-# bot.add_cog(RollTeam(bot))
-# bot.add_cog(MoveToTile(bot))
-# bot.add_cog(ViewTeams(bot))
-# bot.add_cog(ViewTeam(bot))
-# bot.add_cog(MyTeam(bot))
-# bot.add_cog(CreateTeam(bot))
-# bot.add_cog(DeleteTeam(bot))
-# bot.add_cog(AddPlayer(bot))
-# bot.add_cog(RemovePlayer(bot))
-# bot.add_cog(CompleteTile(bot))
-# bot.add_cog(AddCoins(bot))
-# bot.add_cog(SetStars(bot))
-# bot.add_cog(Items(bot))
-# bot.add_cog(AddItem(bot))
-# bot.add_cog(CreateTeam(bot))
-# bot.add_cog(DeleteTeam(bot))
-# bot.add_cog(RenameTeam(bot))
-# bot.add_cog(AddUser(bot))
-# bot.add_cog(Roll(bot))
-# bot.add_cog(Progress(bot))
-# bot.add_cog(Board(bot))
-# bot.add_cog(UseItem(bot))
-# bot.add_cog(Standings(bot))
-# bot.add_cog(CompleteCoin(bot))
-# bot.add_cog(CompleteTile(bot))
-# bot.add_cog(CompleteRegion(bot))
-# bot.add_cog(CompleteGlobal(bot))
-# bot.add_cog(ForceResetRolling(bot))
-# bot.add_cog(ForceResetNotRolling(bot))
-# bot.add_cog(SetTeamTile(bot))
+bot.add_cog(MessageListener(bot))
+
 bot.run(os.getenv("TOKEN"))
+

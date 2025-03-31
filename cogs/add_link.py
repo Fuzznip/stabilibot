@@ -12,7 +12,6 @@ import wom
 class AddLink(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        db.ensure_user_db()
         
     @commands.has_role("Staff")
     @discord.slash_command(name = "add_link", help = "Link an osrs account to a discord account", guild_ids = [int(os.getenv("GUILD_ID"))])
@@ -45,7 +44,7 @@ class AddLink(commands.Cog):
 
         # if usernames is not empty
         if usernames:
-            await interaction.response.send_message(f"Successfully linked {username} to the discord account id {discordid}. The linked accounts are: {', '.join(usernames)}", ephemeral = True)
+            await interaction.response.send_message(f"Successfully linked {username} to the discord account id {discordid}. The linked account is: {usernames}", ephemeral = True)
             return
 
         await interaction.response.send_message(f"I'm not sure how but that user has no accounts linked even after you did it?", ephemeral = True)

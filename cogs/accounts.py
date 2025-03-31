@@ -19,7 +19,7 @@ class Accounts(commands.Cog):
         # Defer the response
         accounts = db.get_user(str(interaction.author.id))
         if accounts:
-            await interaction.response.send_message(f"Linked accounts: {', '.join(accounts)}", ephemeral = True)
+            await interaction.response.send_message(f"Linked accounts: {accounts}", ephemeral = True)
             return
         else:
             await interaction.response.send_message("No accounts linked", ephemeral = True)
