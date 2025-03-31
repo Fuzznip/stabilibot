@@ -14,6 +14,10 @@ class MessageListener(commands.Cog):
         # Ignore messages from the bot itself
         if message.author == self.bot.user:
             return
+        
+        # 80% of the time, do nothing
+        if random.random() < 0.8:
+            return
 
         # List of common words to ignore
         common_words = {"the", "i", "o", "a", "an", "and", "or", "is", "it", "to", "of", "in", "on", "for", "with", "at", "by", "you", "get", "your"}
