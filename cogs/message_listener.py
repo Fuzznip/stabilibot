@@ -15,8 +15,8 @@ class MessageListener(commands.Cog):
         if message.author == self.bot.user:
             return
         
-        # 80% of the time, do nothing
-        if random.random() < 0.8:
+        # 50% of the time, do nothing
+        if random.random() < 0.5:
             return
 
         # List of common words to ignore
