@@ -1,6 +1,7 @@
 from discord.ext import commands
 from discord import ui
 import discord
+import requests
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -8,8 +9,6 @@ import os
 
 import wom
 from wom import Metric, Skills
-
-import utils.db as db
 
 class ApplicationModal(ui.Modal):
   def __init__(self, bot: commands.Bot, interaction: discord.Interaction):
@@ -82,7 +81,24 @@ class ApplicationModal(ui.Modal):
 
         # Link the user's OSRS username to their discord account
         try:
-          await db.add_user(str(interaction.user.id), self.questionOsrsName.value)
+          payload = {
+              "user_id": str(interaction.user.id),
+              "runescape_name": self.questionOsrsName.value,
+              "referral": self.questionRecruitmentMethod.value,
+              "reason": self.questionReasonForJoining.value,
+              "goals": self.questionInGameGoals.value,
+          }
+
+          url = os.getenv("BACKEND_URL") + "/applications"
+          headers = {
+              "Content-Type": "application/json"
+          }
+          response = requests.post(url, json = payload, headers = headers)
+          if response.status_code != 200:
+            print(f"Error linking user to OSRS username in db: {response.status_code} - {response.text}")
+            await womClient.close()
+            return
+          print(response.json())
         except Exception as add_user_error:
           print(f"Error linking user to OSRS username in db: {add_user_error}")
 

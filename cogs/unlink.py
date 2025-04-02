@@ -5,8 +5,6 @@ from dotenv import load_dotenv
 load_dotenv()
 import os
 
-import utils.db as db
-
 class Unlink(commands.Cog):
   def __init__(self, bot):
     self.bot = bot

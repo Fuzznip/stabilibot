@@ -5,8 +5,6 @@ from dotenv import load_dotenv
 load_dotenv()
 import os
 
-import utils.db as db
-
 import wom
 
 class Link(commands.Cog):
