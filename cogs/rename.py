@@ -61,8 +61,12 @@ class Rename(commands.Cog):
                         old_nick = member.nick if member.nick else member.name
                         await member.edit(nick=new_nick)
                         print(f"Updated nickname for {old_nick} to {new_nick}")
+                        await interaction.user.send(f"Nickname updated to {new_nick}")
+                        return
                     except discord.errors.Forbidden:
                         print(f"Bot does not have permission to change nickname for {member.display_name}")
+                        await interaction.user.send(f"Bot does not have permission to change your nickname.")
+                        return
                 else:
                     print(f"Member not found in guild: {interaction.user.id}")
             else:
@@ -71,6 +75,8 @@ class Rename(commands.Cog):
         except Exception as e:
             await interaction.user.send(f"Error updating username: {e}")
             print(f"Error updating username: {e}")
+
+        await interaction.user.send("An error occurred while processing your request. Please try again later.")
 
 def setup(bot):
     bot.add_cog(Rename(bot))
