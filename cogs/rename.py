@@ -7,9 +7,23 @@ class Rename(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    async def is_valid_osrs_name(self, name):
+        hiscores_url = f"https://secure.runescape.com/m=hiscore_oldschool/index_lite.ws?player={name}"
+        try:
+            response = requests.get(hiscores_url)
+            return response.status_code == 200
+        except requests.RequestException as e:
+            print(f"Error checking OSRS Hiscores: {e}")
+            return False
+
     @discord.slash_command(name="namechange", description="Update your OSRS username", guild_ids=[int(os.getenv("GUILD_ID"))])
     async def namechange(self, interaction, new_name: str):
         print(f"{interaction.user.display_name}: /namechange {new_name}")
+
+        # Validate the OSRS name
+        if not await self.is_valid_osrs_name(new_name):
+            await interaction.response.send_message(f"The name '{new_name}' is not valid on the OSRS Hiscores.", ephemeral=True)
+            return
 
         # Update the name in the backend
         try:
