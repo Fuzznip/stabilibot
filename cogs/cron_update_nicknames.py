@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands, tasks
 import requests
 import os
+import asyncio
 
 class UpdateNicknames(commands.Cog):
     def __init__(self, bot):
@@ -68,8 +69,12 @@ class UpdateNicknames(commands.Cog):
                 old_nick = member.nick if member.nick else member.name
                 await member.edit(nick=new_nick)
                 print(f"Updated nickname for {old_nick} to {new_nick}")
+                await asyncio.sleep(1)  # Add a 1-second delay between edits
             except discord.errors.Forbidden:
                 print(f"Bot does not have permission to change nickname for {member.display_name}")
+            except discord.errors.HTTPException as e:
+                print(f"Failed to update nickname for {member.display_name}: {e}")
+                await asyncio.sleep(5)  # Add a longer delay if an HTTPException occurs
 
     @check_usernames.before_loop
     async def before_check_usernames(self):
