@@ -20,9 +20,12 @@ class Rename(commands.Cog):
     async def namechange(self, interaction, new_name: str):
         print(f"{interaction.user.display_name}: /namechange {new_name}")
 
+        # Defer the response to avoid interaction timeout
+        await interaction.response.defer(ephemeral=True)
+
         # Validate the OSRS name
         if not await self.is_valid_osrs_name(new_name):
-            await interaction.response.send_message(f"The name '{new_name}' is not valid on the OSRS Hiscores.", ephemeral=True)
+            await interaction.user.send(f"The name '{new_name}' is not valid on the OSRS Hiscores.")
             return
 
         # Update the name in the backend
@@ -33,7 +36,7 @@ class Rename(commands.Cog):
             response = requests.put(url, json=payload, headers=headers)
 
             if response.status_code == 200:
-                await interaction.response.send_message(f"Username updated to {new_name}", ephemeral=True)
+                await interaction.user.send(f"Username updated to {new_name}")
                 # Set the user's name in discord
                 guild = interaction.guild
                 member = guild.get_member(interaction.user.id)
@@ -63,10 +66,10 @@ class Rename(commands.Cog):
                 else:
                     print(f"Member not found in guild: {interaction.user.id}")
             else:
-                await interaction.response.send_message(f"Error updating username: {response.status_code} - {response.text}", ephemeral=True)
+                await interaction.user.send(f"Error updating username: {response.status_code} - {response.text}")
                 print(f"Error updating username: {response.status_code} - {response.text}")
         except Exception as e:
-            await interaction.response.send_message(f"Error updating username: {e}", ephemeral=True)
+            await interaction.user.send(f"Error updating username: {e}")
             print(f"Error updating username: {e}")
 
 def setup(bot):
