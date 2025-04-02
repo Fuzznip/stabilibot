@@ -18,7 +18,6 @@ from cogs.accounts import Accounts
 from cogs.link import Link
 from cogs.unlink import Unlink
 from cogs.add_link import AddLink
-from cogs.message_listener import MessageListener
 
 class Stabilibot(commands.Bot):
   def __init__(self):
@@ -45,7 +44,6 @@ bot.add_cog(Accounts(bot))
 bot.add_cog(Link(bot))
 bot.add_cog(Unlink(bot))
 bot.add_cog(AddLink(bot))
-bot.add_cog(MessageListener(bot))
 
 bot.run(os.getenv("TOKEN"))
 
