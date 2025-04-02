@@ -52,12 +52,12 @@ class UpdateNicknames(commands.Cog):
             current_nick = member.nick or member.name
 
             # Check if any previous name is in the current nickname
-            matched_previous_name = next((name for name in previous_names if name in current_nick), None)
+            matched_previous_name = next((name for name in previous_names if name.lower() in current_nick.lower()), None)
 
             if matched_previous_name:
                 # Replace the matched previous name with the current name
                 new_nick = current_nick.replace(matched_previous_name, current_name)
-            elif current_name not in current_nick:
+            elif current_name.lower() not in current_nick.lower():
                 # If no match, prepend the current name to the nickname
                 new_nick = f"{current_name}"
             else:
