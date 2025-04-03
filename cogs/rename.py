@@ -23,6 +23,11 @@ class Rename(commands.Cog):
         # Defer the response to avoid interaction timeout
         await interaction.response.defer(ephemeral=True)
 
+        # Make sure the new name only contains alphanumeric characters, spaces, and underscores
+        if not new_name.replace("_", " ").isalnum():
+            await interaction.user.send("Invalid username. Only alphanumeric characters, spaces, and underscores are allowed.")
+            return
+
         # Validate the OSRS name
         if not await self.is_valid_osrs_name(new_name):
             await interaction.user.send(f"The name '{new_name}' is not valid on the OSRS Hiscores.")
