@@ -4,11 +4,16 @@ import discord
 from discord.ext import commands
 import os
 from fastapi import APIRouter, Request, Response
+from pydantic import BaseModel
 import logging
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+class DiscordRoleAction(BaseModel):
+    role: str
+    token: str
 
 class V1(commands.Cog):
     def __init__(self, bot: discord.Bot):
@@ -25,9 +30,9 @@ class V1(commands.Cog):
             return {"message": "Welcome to the API!"}
         
         @self.router.post("/roles/{user_id}/add")
-        async def add_role(request: Request, response: Response, user_id: int, role: str = None, token: str = None):
-            logger.info("Received request to add role '%s' to user ID %d with token: %s", role, user_id, token)
-            if token != os.getenv("API_TOKEN"):
+        async def add_role(request: Request, response: Response, user_id: int, action: DiscordRoleAction):
+            logger.info("Received request to add role '%s' to user ID %d with token: %s", action.role, user_id, action.token)
+            if action.token != os.getenv("API_TOKEN"):
                 logger.warning("Invalid token provided to add_role endpoint")
                 response.status_code = 401
                 return {"error": "Invalid token"}
@@ -43,7 +48,7 @@ class V1(commands.Cog):
                 response.status_code = 404
                 return {"error": "Member not found"}
             
-            role = discord.utils.get(guild.roles, name=role)
+            role = discord.utils.get(guild.roles, name=action.role)
             if not role:
                 logger.error("Role '%s' not found", role)
                 response.status_code = 404
@@ -54,9 +59,9 @@ class V1(commands.Cog):
             return {"message": f"Role {role.name} added to {member.name}"}
         
         @self.router.post("/roles/{user_id}/remove")
-        async def remove_role(request: Request, response: Response, user_id: int, role: str = None, token: str = None):
-            logger.info("Received request to remove role '%s' from user ID %d with token: %s", role, user_id, token)
-            if token != os.getenv("API_TOKEN"):
+        async def remove_role(request: Request, response: Response, user_id: int, action: DiscordRoleAction):
+            logger.info("Received request to remove role '%s' from user ID %d with token: %s", action.role, user_id, action.token)
+            if action.token != os.getenv("API_TOKEN"):
                 logger.warning("Invalid token provided to remove_role endpoint")
                 response.status_code = 401
                 return {"error": "Invalid token"}
@@ -72,7 +77,7 @@ class V1(commands.Cog):
                 response.status_code = 404
                 return {"error": "Member not found"}
             
-            role = discord.utils.get(guild.roles, name=role)
+            role = discord.utils.get(guild.roles, name=action.role)
             if not role:
                 logger.error("Role '%s' not found", role)
                 response.status_code = 404
