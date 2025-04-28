@@ -15,7 +15,6 @@ class CheckAvatarUpdate(commands.Cog):
                 os.getenv("BACKEND_URL") + f"/users/{after.id}",
                 json={
                     "discord_avatar_url": after.avatar.url,
-                    "this_field_isnt_real": "this_field_isnt_real",
                 }
             )
 
