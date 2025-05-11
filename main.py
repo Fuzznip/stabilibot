@@ -23,6 +23,9 @@ from cogs.gear import Gear
 from cogs.submit import Submit
 from cogs.rename import Rename
 from cogs.cron_update_nicknames import UpdateNicknames
+from cogs.event_mod import EventMod
+from cogs.event_user import EventUser
+from cogs.register_alt import RegisterAlt
 
 class Stabilibot(commands.Bot):
   def __init__(self):
@@ -50,5 +53,8 @@ bot.add_cog(Gear(bot))
 bot.add_cog(Submit(bot))
 bot.add_cog(Rename(bot))
 bot.add_cog(UpdateNicknames(bot))
+bot.add_cog(EventMod(bot))
+bot.add_cog(EventUser(bot))
+bot.add_cog(RegisterAlt(bot))
 
 bot.run(os.getenv("TOKEN"))
