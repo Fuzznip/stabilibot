@@ -63,8 +63,9 @@ class TeamSelectView(discord.ui.View):
                 for username in usernames:
                     message += f"\n• {username}"
         
-            await interaction.followup.send(message, ephemeral=True)
-            await interaction.message.delete()  # Delete the original message to clean up
+            # Update the existing message instead of creating a new one and deleting the old one
+            await interaction.message.edit(content=message, view=None)
+            await interaction.followup.send("User added to team successfully!", ephemeral=True)
         else:
             await interaction.followup.send(f"Failed to add user to team: {response_data}", ephemeral=True)
 
@@ -426,7 +427,7 @@ class EventMod(commands.Cog):
         if interaction.user.guild_permissions.administrator:
             return True
         
-        event_mod_role = discord.utils.get(interaction.guild.roles, name="Event Moderator")
+        event_mod_role = discord.utils.get(interaction.guild.roles, name="Staff")
         if event_mod_role and event_mod_role in interaction.user.roles:
             return True
         
