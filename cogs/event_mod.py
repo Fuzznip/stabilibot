@@ -64,10 +64,9 @@ class TeamSelectView(discord.ui.View):
                     message += f"\n• {username}"
         
             # Update the existing message instead of creating a new one and deleting the old one
-            await interaction.message.edit(content=message, view=None)
-            await interaction.followup.send("User added to team successfully!", ephemeral=True)
+            await interaction.message.edit(content="User added to team successfully!", view=None)
         else:
-            await interaction.followup.send(f"Failed to add user to team: {response_data}", ephemeral=True)
+            await interaction.message.edit(content=f"Failed to add user to team: {response_data}", ephemeral=True)
 
 class TeamSelectionView(discord.ui.View):
     def __init__(self, cog, teams, interaction, action_type, timeout=180):
