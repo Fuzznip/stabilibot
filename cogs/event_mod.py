@@ -891,7 +891,7 @@ class EventMod(commands.Cog):
         event_id = event.get('id')
         
         # Now get teams for this event
-        success, teams_data = await self.call_backend_api(
+        success, teams = await self.call_backend_api(
             f"/events/{event_id}/teams",
             None,
             interaction,
@@ -900,14 +900,6 @@ class EventMod(commands.Cog):
         
         if not success:
             await interaction.followup.send(f"Failed to retrieve teams: {teams_data}", ephemeral=True)
-            return
-        
-        teams = teams_data.get('teams', [])
-        if not teams and 'items' in teams_data:
-            teams = teams_data.get('items', [])
-        
-        if not teams:
-            await interaction.followup.send("No teams found for the event.", ephemeral=True)
             return
         
         # Find which team(s) this user is on
