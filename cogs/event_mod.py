@@ -201,7 +201,7 @@ class TeamSelectionView(discord.ui.View):
             event_id = event.get('id')
             
             success, response_data = await self.cog.call_backend_api(
-                f"/events/{event_id}/teams/{team_id}",
+                f"/events/{event_id}/teams/{team_id}/stats",
                 None,
                 interaction,
                 method="GET"
@@ -234,9 +234,7 @@ class TeamSelectionView(discord.ui.View):
                 if members:
                     member_list = []
                     for member in members:
-                        username = member.get('username', 'Unknown')
-                        member_id = member.get('id', 'Unknown')
-                        member_list.append(f"• {username} (ID: {member_id})")
+                        member_list.append(f"{member}")
                     
                     embed.add_field(
                         name="Members", 
@@ -445,10 +443,11 @@ class EventMod(commands.Cog):
                         if response.status in [200, 201]:
                             try:
                                 data = await response.json()
+                                return True, data
                             except aiohttp.ContentTypeError:
                                 # Handle non-JSON responses
                                 data = await response.text()
-                            return True, json.loads(data)
+                                return True, json.loads(data)
                         else:
                             error_text = await response.text()
                             print(f"Error calling {url}: {response.status} - {error_text}")
@@ -899,7 +898,7 @@ class EventMod(commands.Cog):
         )
         
         if not success:
-            await interaction.followup.send(f"Failed to retrieve teams: {teams_data}", ephemeral=True)
+            await interaction.followup.send(f"Failed to retrieve teams: {teams}", ephemeral=True)
             return
         
         # Find which team(s) this user is on
