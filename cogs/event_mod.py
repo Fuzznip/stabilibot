@@ -5,6 +5,7 @@ load_dotenv()
 import os
 import json
 import aiohttp
+import logging
 
 class TeamSelectView(discord.ui.View):
     def __init__(self, user, teams, cog, event_id):
@@ -163,6 +164,14 @@ class TeamSelectionView(discord.ui.View):
             else:
                 await interaction.followup.send(f"Failed to complete tile: {response_data}", ephemeral=True)
                 
+
+        elif self.action_type == "move_team_to_tile":
+            # Show set stars modal
+            team_data = selected_team.get('data', {})
+            current_tile = team_data.get('currentTile', "") if team_data else ""
+            modal = TeamMoveToTileModal(self.cog, team_id, team_name, current_tile)
+            await interaction.response.send_modal(modal)
+            
         elif self.action_type == "undo_turn":
             # Directly undo the turn
             await interaction.response.defer(ephemeral=True)
@@ -391,6 +400,53 @@ class TeamCoinsModal(discord.ui.Modal):
         else:
             await interaction.followup.send(f"Failed to set team coins: {response_data}", ephemeral=True)
 
+class TeamMoveToTileModal(discord.ui.Modal):
+    def __init__(self, cog, team_id, team_name, tile_id):
+        super().__init__(title=f"Move Team to Tile: {team_name}")
+        self.cog = cog
+        self.team_id = team_id
+        self.tile_id = tile_id
+        
+        self.tile = discord.ui.InputText(
+            label="Tile Number",
+            placeholder="Enter the tile id to move the team to",
+            style=discord.InputTextStyle.long,
+            required=True
+        )
+        self.add_item(self.tile)
+    
+    async def callback(self, interaction):
+        await interaction.response.defer(ephemeral=True)
+        
+        tile = self.tile.value
+
+        # Get the first active STABILITY_PARTY event
+        event, error = await self.cog.get_active_event(interaction)
+        if error:
+            await interaction.followup.send(error, ephemeral=True)
+            return
+            
+        event_id = event.get('id')
+        
+        payload = {
+            "tile_id": tile,
+            "moderator_id": str(interaction.user.id)
+        }
+        
+        success, response_data = await self.cog.call_backend_api(
+            f"/events/{event_id}/moderation/teams/{self.team_id}/move-to-tile",
+            payload,
+            interaction,
+            method="PUT"
+        )
+
+        logging.info(f"Move team to tile response: {response_data}")
+        
+        if success:
+            await interaction.followup.send(f"{response_data['message']}", ephemeral=True)
+        else:
+            await interaction.followup.send(f"Failed to move team: {response_data}", ephemeral=True)
+
 class EventMod(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -576,7 +632,7 @@ class EventMod(commands.Cog):
         await interaction.followup.send("Select a team to rename:", view=view, ephemeral=True)
     
     # Complete Tile Command
-    @discord.slash_command(name="event_complete_tile", description="Force completion of a tile for a team", guild_ids=[int(os.getenv("GUILD_ID"))])
+    @discord.slash_command(name="event_complete_tile", description="Force completion of a tile for a team (Without rewards, you need to manually do that)", guild_ids=[int(os.getenv("GUILD_ID"))])
     async def complete_tile(self, interaction):
         print(f"{interaction.user.display_name}: /event_complete_tile")
         
@@ -689,6 +745,43 @@ class EventMod(commands.Cog):
         view = TeamSelectionView(self, teams, interaction, "set_coins")
         await interaction.followup.send("Select a team to set coins for:", view=view, ephemeral=True)
     
+    @discord.slash_command(name="event_move_team_to_tile", description="Move a team to a specific tile", guild_ids=[int(os.getenv("GUILD_ID"))])
+    async def move_team_to_tile(self, interaction):
+        print(f"{interaction.user.display_name}: /event_move_team_to_tile")
+        
+        if not await self.check_mod_permissions(interaction):
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        # Get the first active STABILITY_PARTY event
+        event, error = await self.get_active_event(interaction)
+        if error:
+            await interaction.followup.send(error, ephemeral=True)
+            return
+            
+        event_id = event.get('id')
+        
+        # Get teams for this event
+        success, teams = await self.call_backend_api(
+            f"/events/{event_id}/teams",
+            None,
+            interaction,
+            method="GET"
+        )
+        
+        if not success:
+            await interaction.followup.send(f"Failed to get teams: {teams}", ephemeral=True)
+            return
+            
+        if not teams:
+            await interaction.followup.send("No teams found for this event.", ephemeral=True)
+            return
+        
+        # Show team selection view
+        view = TeamSelectionView(self, teams, interaction, "move_team_to_tile")
+        await interaction.followup.send("Select a team to move to a specific tile:", view=view, ephemeral=True)
+
     # Undo Last Turn Command
     @discord.slash_command(name="event_undo_turn", description="Undo a team's last turn they rolled for", guild_ids=[int(os.getenv("GUILD_ID"))])
     async def undo_turn(self, interaction):

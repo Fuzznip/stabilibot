@@ -419,7 +419,7 @@ class EventUser(commands.Cog):
         
         # Get items
         success, response_data = await self.call_backend_api(
-            f"/events/{event_id}/teams/{team_id}/items",
+            f"/events/{event_id}/teams/{team_id}/items/inventory",
             method="GET"
         )
         
@@ -430,6 +430,8 @@ class EventUser(commands.Cog):
         # Create a detailed embed with the items
         items = response_data.get("items", [])
         
+        logging.info(response_data)
+
         if not items:
             await interaction.followup.send("You have no items in your inventory.")
             return
@@ -439,14 +441,9 @@ class EventUser(commands.Cog):
             color=discord.Color.blue()
         )
         
-        for item in items:
-            item_name = item.get("name", "Unknown Item")
-            item_description = item.get("description", "No description available")
-            item_quantity = item.get("quantity", 0)
-            
-            embed.add_field(name=item_name, value=f"{item_description}\nQuantity: {item_quantity}", inline=False)
+        view = InventoryView(self, interaction, str(event_id), str(team_id), items)
         
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=embed, view=view)
 
     # Roll Dice Command
     @discord.slash_command(name="roll", description="Roll dice to move forward on the board", guild_ids=[int(os.getenv("GUILD_ID"))])
@@ -604,6 +601,7 @@ class EventUser(commands.Cog):
             
             view = None 
 
+            logger.info(f"Action type: {action_type}")
             if action_type == ACTION_TYPES["COMPLETE"]: # Use local ACTION_TYPES
                 logger.info(f"Roll ended - Team {team_id} completed roll sequence.")
                 embed.title = f"🎲 Roll Complete! Total Roll: {roll_data.roll_total_for_turn}"
@@ -729,6 +727,22 @@ class EventUser(commands.Cog):
                 )
             
             # Add more elif blocks for STAR, CONTINUE etc. as needed using ACTION_TYPES["STAR"]
+            elif action_type == ACTION_TYPES["STAR"]: # Use local ACTION_TYPES
+                logger.info(f"Star interaction for team {team_id}")
+                embed.title = "⭐ Star Encounter"
+                embed.description = roll_data.data.get("message", "You've encountered a star! Choose wisely.")
+                star_price = roll_data.data.get("price", 0)
+                current_tile_info = roll_data.data.get("current_tile", {})
+                embed.add_field(name=f"Currently at: {current_tile_info.get('name', 'Star')}", value="Select your star option from the choices below.", inline=False)
+
+                view = RollStarView(
+                    self,
+                    str(event_id),
+                    str(team_id),
+                    star_price,
+                    str(interaction.user.id),
+                    roll_message_ref
+                )
 
             try:
                 if roll_message_ref: 
@@ -1069,9 +1083,12 @@ class RollStarView(RollBaseView):
         next_response = response_data.get("nextStep", {})
         if next_response:
             await self.cog.process_roll_progression(interaction, next_response)
+
+        # Continue the journey
+        await self.cog.process_roll_progression(interaction, response_data)
         
         # Let the user know their purchase was successful
-        await interaction.followup.send("Star purchased! Check the updated message.", ephemeral=True)
+        #await interaction.followup.send("Star purchased! Check the updated message.", ephemeral=True)
     
     async def skip_star(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
@@ -1091,7 +1108,7 @@ class RollStarView(RollBaseView):
         await self.cog.process_roll_progression(interaction, response_data)
         
         # Let the user know their selection was received
-        await interaction.followup.send("Continuing journey! Check the updated message.", ephemeral=True)
+        #await interaction.followup.send("Continuing journey! Check the updated message.", ephemeral=True)
 
 class RollDockInitialView(RollBaseView):
     def __init__(self, cog, event_id: str, team_id: str, destinations: list, team_coins: int, 
@@ -1769,7 +1786,165 @@ class FirstRollIslandSelectView(RollBaseView): # Inherit from RollBaseView
             logger.error(f"Exception during island selection callback for team {self.team_id}: {e}", exc_info=True)
             await interaction.followup.send(f"An unexpected error occurred: {str(e)[:1000]}", ephemeral=True)
 
-def setup(bot):
-    logger.info("Adding EventUser cog to bot")
-    bot.add_cog(EventUser(bot))
-    logger.info("EventUser cog successfully added")
+class ItemBaseView(discord.ui.View):
+    def __init__(self, cog, interaction: discord.Interaction, event_id: str, team_id: str, original_message: discord.Message = None):
+        super().__init__(timeout=180)  # 3 minutes timeout
+        self.cog = cog
+        self.original_interaction = interaction
+        self.event_id = event_id
+        self.team_id = team_id
+        self.original_message = original_message
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.original_interaction.user.id:
+            await interaction.response.send_message("You cannot interact with this inventory display.", ephemeral=True)
+            return False
+        return True
+
+    async def on_timeout(self):
+        if self.original_message:
+            try:
+                timeout_embed = discord.Embed(
+                    title="Inventory Closed",
+                    description="This inventory view has timed out.",
+                    color=discord.Color.orange()
+                )
+                await self.original_message.edit(embed=timeout_embed, view=None)
+            except discord.NotFound:
+                logger.warning(f"Original message {self.original_message.id} not found on timeout for inventory view.")
+            except Exception as e:
+                logger.error(f"Error editing message on inventory view timeout: {e}")
+        for item in self.children:
+            item.disabled = True
+        self.stop()
+
+    async def handle_cancel(self, interaction: discord.Interaction):
+        # Defer should be done by the calling method with appropriate ephemeral status
+        try:
+            if self.original_message:
+                await self.original_message.delete()
+                logger.info(f"Inventory message {self.original_message.id} deleted by user {interaction.user.id}.")
+            else: # Fallback
+                await interaction.delete_original_response()
+                logger.info(f"Original interaction response for inventory deleted by user {interaction.user.id}.")
+        except discord.NotFound:
+            logger.warning(f"Attempted to delete inventory message for user {interaction.user.id}, but it was already deleted.")
+        except Exception as e:
+            logger.error(f"Error deleting inventory message for user {interaction.user.id}: {e}")
+        self.stop()
+
+class ItemDetailView(ItemBaseView):
+    def __init__(self, cog, interaction: discord.Interaction, event_id: str, team_id: str, item_data: dict, all_items: list, original_message: discord.Message):
+        super().__init__(cog, interaction, event_id, team_id, original_message)
+        self.item_data = item_data
+        self.all_items = all_items
+
+        item_name = self.item_data.get("name", "Unknown Item")
+        item_id = self.item_data.get("id", "unknown") # Ensure custom_id is valid
+
+        use_button = discord.ui.Button(label=f"Use {item_name}", style=discord.ButtonStyle.green, custom_id=f"item_use_{item_id}")
+        use_button.callback = self.use_item_callback
+        self.add_item(use_button)
+
+        back_button = discord.ui.Button(label="Back to Inventory", style=discord.ButtonStyle.grey, custom_id="item_back")
+        back_button.callback = self.back_to_inventory_callback
+        self.add_item(back_button)
+
+        cancel_button = discord.ui.Button(label="Cancel", style=discord.ButtonStyle.red, custom_id="item_detail_cancel")
+        cancel_button.callback = self.cancel_button_callback
+        self.add_item(cancel_button)
+
+    async def use_item_callback(self, interaction: discord.Interaction):
+        await interaction.response.defer() # Edits original message, so not ephemeral
+        item_id = self.item_data.get("id")
+        item_name = self.item_data.get("name", "Unknown Item")
+
+        if not item_id:
+            await self.original_message.edit(content="Error: Item ID is missing. Cannot use this item.", embed=None, view=None)
+            logger.error(f"User {interaction.user.id} tried to use item without ID: {self.item_data}")
+            return
+
+        success, response_data = await self.cog.call_backend_api(
+            f"/events/{self.event_id}/teams/{self.team_id}/items/use",
+            method="POST",
+            payload={"itemId": item_id}
+        )
+
+        result_embed = discord.Embed(title=f"Using {item_name}")
+        if success:
+            message = response_data.get("message", f"Successfully used {item_name}.")
+            result_embed.description = f"✅ {message}"
+            result_embed.color = discord.Color.green()
+            logger.info(f"User {interaction.user.id} used item {item_id} for team {self.team_id}. Response: {message}")
+
+            refreshed_items, error_msg = await self.cog._fetch_inventory_items(self.event_id, self.team_id)
+            if error_msg:
+                result_embed.description += f"\n\n⚠️ Failed to refresh inventory: {error_msg}"
+                await self.original_message.edit(embed=result_embed, view=None) # Show use result, then error
+                return
+
+            if not refreshed_items:
+                result_embed.description += "\n\nYour inventory is now empty."
+                await self.original_message.edit(embed=result_embed, view=None)
+            else:
+                inventory_embed, inventory_view = self.cog._build_inventory_display(
+                    self.original_interaction, self.event_id, self.team_id, refreshed_items, self.original_message
+                )
+                # Prepend use message to the new inventory display
+                if inventory_embed.description:
+                    inventory_embed.description = f"✅ {message}\n\n{inventory_embed.description}"
+                else:
+                    inventory_embed.description = f"✅ {message}"
+                await self.original_message.edit(embed=inventory_embed, view=inventory_view)
+        else:
+            error_message = response_data if isinstance(response_data, str) else response_data.get("detail", "Failed to use item.")
+            result_embed.description = f"❌ {error_message}"
+            result_embed.color = discord.Color.red()
+            logger.error(f"User {interaction.user.id} failed to use item {item_id} for team {self.team_id}. Error: {error_message}")
+            await self.original_message.edit(embed=result_embed, view=self) # Re-show current view with error
+
+    async def back_to_inventory_callback(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        inventory_embed, inventory_view = self.cog._build_inventory_display(
+            self.original_interaction, self.event_id, self.team_id, self.all_items, self.original_message
+        )
+        await self.original_message.edit(embed=inventory_embed, view=inventory_view)
+
+    async def cancel_button_callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        await self.handle_cancel(interaction)
+
+class InventoryView(ItemBaseView):
+    def __init__(self, cog, interaction: discord.Interaction, event_id: str, team_id: str, items: list):
+        super().__init__(cog, interaction, event_id, team_id)
+        self.items = items
+
+        for item_data in self.items:
+            item_name = item_data.get("name", "Unknown Item")
+            item_id = item_data.get("id", item_name.replace(" ", "_").lower()) # Fallback custom_id
+            button = discord.ui.Button(label=item_name, style=discord.ButtonStyle.secondary, custom_id=f"inventory_view_item_{item_id}")
+            button.callback = self.create_show_item_detail_callback(item_data)
+            self.add_item(button)
+
+        cancel_button = discord.ui.Button(label="Close Inventory", style=discord.ButtonStyle.red, custom_id="inventory_cancel_main")
+        cancel_button.callback = self.cancel_button_callback
+        self.add_item(cancel_button)
+
+    def create_show_item_detail_callback(self, item_data: dict):
+        async def callback(interaction: discord.Interaction):
+            await interaction.response.defer()
+            detailed_view = ItemDetailView(
+                self.cog,
+                interaction,
+                self.event_id,
+                self.team_id,
+                item_data,
+                self.items,
+                self.original_message
+            )
+            await self.original_message.edit(view=detailed_view)
+        return callback
+
+    async def cancel_button_callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        await self.handle_cancel(interaction)
