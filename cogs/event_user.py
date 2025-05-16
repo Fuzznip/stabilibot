@@ -471,25 +471,25 @@ class EventUser(commands.Cog):
         
         logger.debug(f"User {interaction.user.id} team found: {team_id}")
         
-        # Check if there's already an active roll for this team
-        if team_id in self.active_rolls:
-            active_roller_id = self.active_rolls[team_id]
-            logger.debug(f"Team {team_id} has an active roll by user {active_roller_id}")
+        # # Check if there's already an active roll for this team
+        # if team_id in self.active_rolls:
+        #     active_roller_id = self.active_rolls[team_id]
+        #     logger.debug(f"Team {team_id} has an active roll by user {active_roller_id}")
             
-            if active_roller_id != str(interaction.user.id):
-                # Someone else from the team already has an active roll
-                active_roller = await self.bot.fetch_user(int(active_roller_id))
-                if active_roller:
-                    roller_name = active_roller.display_name
-                    logger.info(f"Roll blocked: {interaction.user.display_name} attempted to roll while {roller_name} already has an active roll")
-                else:
-                    roller_name = "Another player"
-                    logger.info(f"Roll blocked: {interaction.user.display_name} attempted to roll while another user already has an active roll")
+        #     if active_roller_id != str(interaction.user.id):
+        #         # Someone else from the team already has an active roll
+        #         active_roller = await self.bot.fetch_user(int(active_roller_id))
+        #         if active_roller:
+        #             roller_name = active_roller.display_name
+        #             logger.info(f"Roll blocked: {interaction.user.display_name} attempted to roll while {roller_name} already has an active roll")
+        #         else:
+        #             roller_name = "Another player"
+        #             logger.info(f"Roll blocked: {interaction.user.display_name} attempted to roll while another user already has an active roll")
                 
-                await interaction.followup.send(f"⚠️ {roller_name} already started a roll for your team. Please wait until their roll sequence is complete.")
-                return
-            else:
-                logger.debug(f"User {interaction.user.id} is continuing their existing roll for team {team_id}")
+        #         await interaction.followup.send(f"⚠️ {roller_name} already started a roll for your team. Please wait until their roll sequence is complete.")
+        #         return
+        #     else:
+        #         logger.debug(f"User {interaction.user.id} is continuing their existing roll for team {team_id}")
         
         # Start the roll
         logger.info(f"Starting roll for team {team_id} by user {interaction.user.id}")
