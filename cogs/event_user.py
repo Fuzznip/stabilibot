@@ -1419,19 +1419,12 @@ class RollDockSelectorView(RollBaseView):
             inline=False
         )
         
-        embed.add_field(
-            name="Available Destinations",
-            value=f"There are **{len(self.destinations)}** islands you can charter a ship to for **{self.charter_price}** coins each.",
-            inline=False
-        )
-        
         # Create a new initial view
         initial_view = RollDockInitialView(
             self.cog,
             self.event_id,
             self.team_id,
             self.destinations,
-            self.charter_price,
             self.team_coins,
             self.initiator_id,
             self.roll_message
