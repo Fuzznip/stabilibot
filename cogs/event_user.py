@@ -24,18 +24,46 @@ logger = logging.getLogger("event_user")
 
 # Roll progression data class
 class RollProgressionPayload:
-    def __init__(self, data: Dict[str, Any]):
-        self.eventId = data.get("event_id", "")
-        self.teamId = data.get("team_id", "")
-        self.startingTileId = data.get("starting_tile_id", "")
-        self.currentTileId = data.get("current_tile_id", "")
-        self.rollDistanceTotal = data.get("roll_total", 0)
-        self.rollDistanceRemaining = data.get("roll_remaining", 0)
-        self.rollType = data.get("action_required", "end")
-        self.data = data.get("action_data", {})
+    def __init__(self, data: dict):
+        self.raw_data = data
+        # Use action_required as the primary type indicator
+        self.action_required = data.get("action_required")
+        # The nested action_data contains specifics for the current action
+        self.data = data.get("action_data", {}) 
         
-        logger.debug(f"Roll payload initialized: type={self.rollType}, event={self.eventId}, team={self.teamId}, " +
-                    f"distance={self.rollDistanceTotal}, remaining={self.rollDistanceRemaining}")
+        self.eventId = data.get("event_id")
+        self.teamId = data.get("team_id")
+        self.startingTileId = data.get("starting_tile_id")
+        self.currentTileId = data.get("current_tile_id")
+        
+        # These are overall roll state values for the current turn/movement sequence
+        self.roll_total_for_turn = data.get("roll_total_for_turn") 
+        self.roll_remaining = data.get("roll_remaining")
+        self.dice_results_for_roll = data.get("dice_results_for_roll", [])
+        self.modifier_for_roll = data.get("modifier_for_roll", 0)
+        self.path_taken_this_turn = data.get("path_taken_this_turn", [])
+
+    # For convenience if 'rollType' was used before, map it to action_required
+    @property
+    def rollType(self):
+        return self.action_required
+
+    # Convenience accessors for data that might be at top level or in action_data
+    # For "first_roll", dice results and roll total are in action_data
+    def get_current_action_dice_results(self):
+        if self.action_required == "first_roll":
+            return self.data.get("dice_results_for_roll", [])
+        return self.dice_results_for_roll
+
+    def get_current_action_modifier(self):
+        if self.action_required == "first_roll":
+            return self.data.get("modifier_for_roll", 0)
+        return self.modifier_for_roll
+
+    def get_current_action_roll_total(self):
+        if self.action_required == "first_roll":
+            return self.data.get("roll_total_for_turn")
+        return self.roll_total_for_turn
 
 class EventUser(commands.Cog):
     def __init__(self, bot):
@@ -43,6 +71,7 @@ class EventUser(commands.Cog):
         self.backend_url = os.getenv("BACKEND_URL")
         # Dictionary to track active rolls and who initiated them
         self.active_rolls: Dict[str, str] = {}  # team_id -> discord_user_id
+        self.active_item_views: Dict[str, discord.ui.View] = {}  # team_id -> discord.ui.View
         # Add a dictionary to store the original roll messages
         self.roll_messages: Dict[str, discord.Message] = {}  # team_id -> discord.Message
         logger.info(f"EventUser cog initialized with backend URL: {self.backend_url}")
@@ -63,8 +92,14 @@ class EventUser(commands.Cog):
             logger.warning("No active events found")
             return None, "No active events found."
 
-        # Return the first active event
-        return events[0], None
+        # Return the first active event with type "STABILITY_PARTY"
+        for event in events:
+            if event.get("type") == "STABILITY_PARTY":
+                logger.info(f"Active event found: {event['id']}")
+                return event, None
+            
+        logger.warning("No active stability party events found")
+        return None, "No active stability party events found."
     
     # Helper method to get the user's team
     async def get_user_team(self, interaction, event_id):
@@ -289,7 +324,7 @@ class EventUser(commands.Cog):
         await interaction.followup.send(embed=embed)
     
     # Get Tile Progress Command
-    @discord.slash_command(name="event_progress", description="View your team's current tile progress", guild_ids=[int(os.getenv("GUILD_ID"))])
+    @discord.slash_command(name="progress", description="View your team's current tile progress", guild_ids=[int(os.getenv("GUILD_ID"))])
     async def get_tile_progress(self, interaction):
         logger.info(f"{interaction.user.display_name} ({interaction.user.id}): /event_progress")
         
@@ -362,8 +397,59 @@ class EventUser(commands.Cog):
         
         await interaction.followup.send(embed=embed)
 
+    @discord.slash_command(name="items", description="View and use items in your inventory", guild_ids=[int(os.getenv("GUILD_ID"))])
+    async def view_items(self, interaction):
+        logger.info(f"{interaction.user.display_name} ({interaction.user.id}): /items")
+        
+        await interaction.response.defer(ephemeral=False)
+        
+        # Get the first active event
+        event, error = await self.get_active_event(interaction)
+        if error:
+            await interaction.followup.send(error)
+            return
+            
+        event_id = event.get('id')
+        
+        # Get the user's team
+        team_id, error = await self.get_user_team(interaction, event_id)
+        if error:
+            await interaction.followup.send(error)
+            return
+        
+        # Get items
+        success, response_data = await self.call_backend_api(
+            f"/events/{event_id}/teams/{team_id}/items",
+            method="GET"
+        )
+        
+        if not success:
+            await interaction.followup.send(f"Failed to get items: {response_data}")
+            return
+        
+        # Create a detailed embed with the items
+        items = response_data.get("items", [])
+        
+        if not items:
+            await interaction.followup.send("You have no items in your inventory.")
+            return
+        
+        embed = discord.Embed(
+            title="Your Inventory",
+            color=discord.Color.blue()
+        )
+        
+        for item in items:
+            item_name = item.get("name", "Unknown Item")
+            item_description = item.get("description", "No description available")
+            item_quantity = item.get("quantity", 0)
+            
+            embed.add_field(name=item_name, value=f"{item_description}\nQuantity: {item_quantity}", inline=False)
+        
+        await interaction.followup.send(embed=embed)
+
     # Roll Dice Command
-    @discord.slash_command(name="event_roll", description="Roll dice to move forward on the board", guild_ids=[int(os.getenv("GUILD_ID"))])
+    @discord.slash_command(name="roll", description="Roll dice to move forward on the board", guild_ids=[int(os.getenv("GUILD_ID"))])
     async def roll_dice(self, interaction):
         logger.info(f"{interaction.user.display_name} ({interaction.user.id}): /event_roll")
         
@@ -417,7 +503,7 @@ class EventUser(commands.Cog):
         
         if not success:
             logger.error(f"Failed to roll dice for team {team_id}: {response_data}")
-            await interaction.followup.send(f"Failed to roll dice: {response_data}")
+            await interaction.followup.send(f"Failed to roll dice: Your team is not able to roll right now.")
             return
         
         logger.debug(f"Roll API response: {json.dumps(response_data)[:200]}...")
@@ -447,210 +533,242 @@ class EventUser(commands.Cog):
                 logger.info(f"Cleaned up roll message for team {team_id} due to error")
 
     # Process roll progression
-    async def process_roll_progression(self, interaction, response_data):
+    async def process_roll_progression(self, interaction: discord.Interaction, response_data: dict, existing_message: discord.Message = None):
         """Process the roll progression response and update the existing UI"""
-        logger.info(f"{json.dumps(response_data, indent=2)}")
+        
+        # --- Define ACTION_TYPES locally if RollState class is not available ---
+        ACTION_TYPES = {
+            "CONTINUE": "continue",
+            "SHOP": "shop",
+            "STAR": "star",
+            "DOCK": "dock",
+            "CROSSROAD": "crossroad",
+            "COMPLETE": "complete",
+            "FIRST_ROLL": "first_roll",
+            "ISLAND_SELECTION": "island_selection"
+        }
+        # --- End local ACTION_TYPES definition ---
+
+        logger.info("Processing roll progression response:")
+        logger.info(f"{json.dumps(response_data, indent=2)}") 
         
         try:
             roll_data = RollProgressionPayload(response_data)
-            roll_type = roll_data.rollType
+            action_type = roll_data.action_required 
             team_id = roll_data.teamId
+            event_id = roll_data.eventId 
             
-            logger.info(f"Roll progression - Type: {roll_type}, Team: {team_id}, Event: {roll_data.eventId}")
+            logger.info(f"Roll progression - Type: {action_type}, Team: {team_id}, Event: {event_id}")
             logger.debug(f"Roll details - From: {roll_data.startingTileId}, To: {roll_data.currentTileId}, " +
-                        f"Total: {roll_data.rollDistanceTotal}, Remaining: {roll_data.rollDistanceRemaining}")
+                        f"TotalForTurn: {roll_data.roll_total_for_turn}, Remaining: {roll_data.roll_remaining}")
             
-            # Log all fields in data
-            # logger.info(f"{json.dumps(roll_data.data, indent=2)}")
+            roll_message_ref = existing_message
+            if not roll_message_ref:
+                if interaction.message and interaction.message.author == self.bot.user:
+                    roll_message_ref = interaction.message
+                else: 
+                    logger.warning(f"No existing message to edit for team {team_id}, sending new followup.")
+                    if interaction.response.is_done():
+                        roll_message_ref = await interaction.followup.send("🎲 Roll in progress...", wait=True)
+                    else: 
+                        # This path should ideally not be taken if interaction is from a component callback that deferred.
+                        # If it's the initial command, interaction.response.send_message should be used first.
+                        try:
+                            await interaction.response.send_message("🎲 Roll in progress...", ephemeral=True) 
+                            roll_message_ref = await interaction.original_response()
+                        except discord.errors.InteractionResponded: # If already responded (e.g. by a quick defer)
+                            roll_message_ref = await interaction.followup.send("🎲 Roll in progress...", wait=True)
 
-            # Get the stored message for this roll
-            roll_message = self.roll_messages.get(team_id)
-            if not roll_message:
-                logger.warning(f"No stored roll message found for team {team_id}, creating new message")
-                roll_message = await interaction.followup.send("🎲 Roll in progress...", wait=True)
-                self.roll_messages[team_id] = roll_message
+                if team_id: 
+                    self.roll_messages[team_id] = roll_message_ref 
+
+            embed = discord.Embed(title="🎲 Roll in Progress...") 
             
-            # Create the base embed for the roll
-            embed = discord.Embed(
-                title="🎲 Roll Progress",
-                description=f"Team rolled a total of {roll_data.rollDistanceTotal}. Moving from tile {roll_data.startingTileId} to {roll_data.currentTileId}.",
-                color=discord.Color.blue()
-            )
+            dice_rolled_display = roll_data.get_current_action_dice_results()
+            modifier_display = roll_data.get_current_action_modifier()
+            roll_total_display = roll_data.get_current_action_roll_total()
+
+            if roll_total_display is not None:
+                embed.description = f"Rolled: {dice_rolled_display} + Mod: {modifier_display} = **{roll_total_display}** total!"
+            else:
+                embed.description = "Processing your action..."
+
+            embed.color = discord.Color.blue()
             
-            if roll_data.rollDistanceRemaining > 0:
+            if roll_data.roll_remaining is not None and roll_data.roll_remaining > 0 and action_type != ACTION_TYPES["FIRST_ROLL"]:
                 embed.add_field(
-                    name="Progress",
-                    value=f"Distance remaining: {roll_data.rollDistanceRemaining}/{roll_data.rollDistanceTotal}",
+                    name="Movement",
+                    value=f"Moves remaining: {roll_data.roll_remaining}/{roll_data.roll_total_for_turn}",
                     inline=False
                 )
             
-            # Create a view for buttons if needed
-            view = None
+            view = None 
 
-            # Handle different roll types
-            if roll_type == "complete":
-                logger.info(f"Roll ended - Team {team_id} completed roll")
-                # Roll has ended, show final position
-                embed.title = "🎲 Roll Complete!"
+            if action_type == ACTION_TYPES["COMPLETE"]: # Use local ACTION_TYPES
+                logger.info(f"Roll ended - Team {team_id} completed roll sequence.")
+                embed.title = f"🎲 Roll Complete! Total Roll: {roll_data.roll_total_for_turn}"
                 embed.color = discord.Color.green()
                 
-                current_tile = roll_data.data.get("current_tile", {})
-                new_tile_name = current_tile.get("name", "Unknown")
-                new_tile_description = current_tile.get("description", "No description available")
-                message = roll_data.data.get("message", f"You've landed on {new_tile_name}!")
+                current_tile_info = roll_data.data.get("current_tile", {})
+                landed_tile_name = current_tile_info.get("name", "an unnamed tile")
+                landed_tile_desc = current_tile_info.get("description", "No further details.")
+                completion_message = roll_data.data.get("message", f"You've landed on **{landed_tile_name}**!")
                 
-                logger.debug(f"Final tile - Name: {new_tile_name}, Description: {new_tile_description}")
-                
-                embed.description = message
+                path_taken = roll_data.data.get("path_taken_this_turn")
+                distance_moved = roll_data.roll_total_for_turn
+
+                embed.description = completion_message
+                embed.add_field(name=f"Landed on: {landed_tile_name}", value=landed_tile_desc, inline=False)
                 
                 embed.add_field(
-                    name=f"Landed on Tile: {new_tile_name}",
-                    value=new_tile_description if new_tile_description else "No description available",
+                    name="Total Distance Moved",
+                    value=f"Moved {distance_moved} spaces: {' -> '.join(path_taken)}",
                     inline=False
                 )
-                
-                # Clean up the active roll for this team
-                if team_id in self.active_rolls:
+
+                if team_id and team_id in self.active_rolls: 
                     del self.active_rolls[team_id]
-                    logger.info(f"Cleaned up active roll for team {team_id} - Roll completed")
+
+            elif action_type == ACTION_TYPES["FIRST_ROLL"]: # Use local ACTION_TYPES
+                logger.info(f"First roll for team {team_id}. Prompting for island selection.")
+                embed.title = "🎉 Welcome - First Roll!"
+                embed.description = roll_data.data.get("message", "Roll your dice and choose your starting island!")
+                embed.add_field(name="Your Roll", value=f"Dice: {roll_data.data.get('dice_results_for_roll')} + Mod: {roll_data.data.get('modifier_for_roll')} = **{roll_data.data.get('roll_total_for_turn')}**", inline=False)
                 
-                # We don't delete from roll_messages to keep the reference to the final message
-                    
-            elif roll_type == "crossroad":
-                # ...existing crossroad handling code...
-                pass
-                
-            elif roll_type == "shop":
-                logger.info(f"Roll at item shop - Team {team_id} is at a shop")
-                
-                # Get shop data from the payload
-                available_items = roll_data.data.get("available_items", [])
-                team_coins = roll_data.data.get("coins", 0)
-                current_tile = roll_data.data.get("current_tile", {})
-                message = roll_data.data.get("message", "You've found a shop!")
-                moves_remaining = roll_data.data.get("moves_remaining", 0)
-                
-                tile_name = current_tile.get("name", "Shop")
-                
-                logger.debug(f"Shop data: {len(available_items)} items, {team_coins} coins, at tile {tile_name}")
-                
-                # Create an embed for the shop
-                embed.title = "🛒 Item Shop"
-                embed.description = message
-                embed.color = discord.Color.purple()
-                
-                embed.add_field(
-                    name="Your Team",
-                    value=f"💰 **{team_coins} coins** available\n🎲 **{moves_remaining}** moves remaining",
-                    inline=False
-                )
-                
-                # Show item count but don't list them all initially
-                if not available_items:
-                    embed.add_field(
-                        name="No Items Available",
-                        value="This shop has no items in stock.",
-                        inline=False
+                available_islands = roll_data.data.get("available_islands", [])
+                if available_islands:
+                    view = FirstRollIslandSelectView(
+                        self, 
+                        str(event_id), 
+                        str(team_id),  
+                        available_islands,
+                        roll_data.data.get("roll_total_for_turn", 0), 
+                        str(interaction.user.id), 
+                        roll_message_ref
+                    )
+                    if team_id: 
+                        if team_id not in self.active_rolls: self.active_rolls[team_id] = {}
+                        self.active_rolls[team_id]['first_roll_total'] = roll_data.data.get("roll_total_for_turn", 0)
+                        self.active_rolls[team_id]['roll_remaining'] = 0 
+                else:
+                    embed.add_field(name="Error", value=roll_data.data.get("error", "No starting islands configured!"), inline=False)
+                    if team_id and team_id in self.active_rolls: del self.active_rolls[team_id] 
+
+            elif action_type == ACTION_TYPES["CROSSROAD"]: # Use local ACTION_TYPES
+                logger.info(f"Crossroad for team {team_id}")
+                embed.title = "🛤️ Crossroad Ahead!"
+                embed.description = roll_data.data.get("message", "You've reached a crossroad. Choose your path!")
+                options = roll_data.data.get("options", [])
+                current_tile_info = roll_data.data.get("current_tile", {})
+                embed.add_field(name=f"Currently at: {current_tile_info.get('name', 'Crossroad')}", value="Select your next tile from the options below.", inline=False)
+
+                if options:
+                    view = RollCrossroadView( 
+                        self, 
+                        str(event_id), 
+                        str(team_id), 
+                        options,
+                        str(interaction.user.id), 
+                        roll_message_ref
                     )
                 else:
-                    embed.add_field(
-                        name="Available Items",
-                        value=f"There are **{len(available_items)}** items available in this shop.",
-                        inline=False
-                    )
-                
-                # Create a view for the initial shop choice
+                    embed.add_field(name="No Options", value="Strangely, no paths lead from here...", inline=False)
+                    if team_id and team_id in self.active_rolls: del self.active_rolls[team_id]
+
+
+            elif action_type == ACTION_TYPES["SHOP"]: # Use local ACTION_TYPES
+                logger.info(f"Shop interaction for team {team_id}")
+                embed.title = "🛒 Item Shop!"
+                embed.description = roll_data.data.get("message", "Welcome to the shop!")
+                available_items = roll_data.data.get("items", [])
+                team_coins = roll_data.data.get("coins", 0)
+                moves_remaining_at_shop = roll_data.data.get("moves_remaining", roll_data.roll_remaining) 
+
+                embed.add_field(name="Your Wallet", value=f"💰 {team_coins} Coins", inline=True)
+
+                active_roll_context = {"roll_remaining": moves_remaining_at_shop}
+                if team_id and team_id in self.active_rolls: 
+                    active_roll_context = self.active_rolls[team_id]
+                    active_roll_context["roll_remaining"] = moves_remaining_at_shop 
+
                 view = RollShopInitialView(
-                    self, 
-                    roll_data.eventId,
-                    team_id, 
+                    self,
+                    str(event_id),
+                    str(team_id),
                     available_items,
                     team_coins,
-                    self.active_rolls[team_id],
-                    roll_message
+                    str(interaction.user.id), 
+                    roll_message_ref,
+                    active_roll_context 
                 )
-                logger.debug(f"Created initial shop view with {len(available_items)} items")
-                
-            elif roll_type == "star":
-                # ...existing star handling code...
-                pass
-                
-            elif roll_type == "dock":
-                logger.info(f"Roll at dock - Team {team_id} is at a ship charter point")
-                
-                # Get dock data from the payload
-                charter_price = roll_data.data.get("charter_price", 10)
-                team_coins = roll_data.data.get("coins", 0)
-                destinations = roll_data.data.get("destinations", [])
-                current_tile = roll_data.data.get("current_tile", {})
-                message = roll_data.data.get("message", "You've found a dock!")
-                moves_remaining = roll_data.data.get("moves_remaining", 0)
-                
-                tile_name = current_tile.get("name", "Dock")
-                
-                logger.debug(f"Dock data: {len(destinations)} destinations, {team_coins} coins, at tile {tile_name}")
-                
-                # Create an embed for the dock
+
+            elif action_type == ACTION_TYPES["DOCK"]: # Use local ACTION_TYPES
+                logger.info(f"Dock interaction for team {team_id}")
                 embed.title = "⚓ Ship Charter"
-                embed.description = message
-                embed.color = discord.Color.blue()
-                
-                embed.add_field(
-                    name="Your Team",
-                    value=f"💰 **{team_coins} coins** available\n🎲 **{moves_remaining}** moves remaining",
-                    inline=False
-                )
-                
-                # Show destination count but don't list them all initially
-                if not destinations:
-                    embed.add_field(
-                        name="No Destinations Available",
-                        value="There are no destinations you can charter a ship to.",
-                        inline=False
-                    )
-                else:
-                    embed.add_field(
-                        name="Available Destinations",
-                        value=f"There are **{len(destinations)}** islands you can charter a ship to for **{charter_price}** coins each.",
-                        inline=False
-                    )
-                
-                # Create a view for the dock initial choice
+                embed.description = roll_data.data.get("message", "You've reached a dock. Care to travel?")
+                destinations = roll_data.data.get("destinations", [])
+                team_coins = roll_data.data.get("coins", 0)
+                moves_remaining_at_dock = roll_data.data.get("moves_remaining", roll_data.roll_remaining)
+
+                embed.add_field(name="Your Wallet", value=f"💰 {team_coins} Coins", inline=True)
+
+                active_roll_context_dock = {"roll_remaining": moves_remaining_at_dock}
+                if team_id and team_id in self.active_rolls:
+                    active_roll_context_dock = self.active_rolls[team_id]
+                    active_roll_context_dock["roll_remaining"] = moves_remaining_at_dock
+
                 view = RollDockInitialView(
-                    self, 
-                    roll_data.eventId,
-                    team_id, 
+                    self,
+                    str(event_id),
+                    str(team_id),
                     destinations,
-                    charter_price,
                     team_coins,
-                    self.active_rolls[team_id],
-                    roll_message
+                    str(interaction.user.id),
+                    roll_message_ref,
+                    active_roll_context_dock
                 )
-                logger.debug(f"Created initial dock view with {len(destinations)} destinations")
+            
+            # Add more elif blocks for STAR, CONTINUE etc. as needed using ACTION_TYPES["STAR"]
 
             try:
-                logger.debug(f"Updating roll message {roll_message.id} for team {team_id}")
-                await roll_message.edit(content=None, embed=embed, view=view)
-                logger.info(f"Roll progression UI updated for team {team_id}")
-            except discord.errors.HTTPException as http_error:
-                if "Invalid Webhook Token" in str(http_error) or http_error.status == 401:
-                    logger.warning(f"Webhook token expired for team {team_id}. Creating a new message.")
-                    # The webhook token has expired, create a new message instead
-                    new_message = await interaction.followup.send(embed=embed, view=view, wait=True)
-                    
-                    # Update our tracking to use the new message
-                    self.roll_messages[team_id] = new_message
-                    logger.info(f"Created new roll message {new_message.id} for team {team_id} due to expired webhook")
-                else:
-                    # Re-raise other HTTP exceptions
-                    raise
-        
-        except Exception as e:
-            logger.error(f"Error in process_roll_progression: {str(e)}", exc_info=True)
-            logger.error(traceback.format_exc())
-            raise  # Re-raise to be handled by the calling function
+                if roll_message_ref: 
+                    await roll_message_ref.edit(content=None, embed=embed, view=view)
+                    logger.info(f"Roll progression UI updated for team {team_id} on message {roll_message_ref.id}")
+                else: 
+                    logger.error(f"Critical: roll_message_ref is None for team {team_id}, cannot update UI.")
+                    if interaction and not interaction.response.is_done():
+                        await interaction.response.send_message(embed=embed, view=view, ephemeral=True) 
+                    elif interaction:
+                        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
-# Views for different roll scenarios
+            except discord.errors.HTTPException as http_error:
+                if http_error.status == 404: 
+                    logger.warning(f"Original roll message for team {team_id} not found. Sending a new one.")
+                    target_channel = interaction.channel
+                    if not target_channel and roll_message_ref: 
+                        target_channel = roll_message_ref.channel
+                    if target_channel:
+                        new_message = await target_channel.send(embed=embed, view=view) 
+                        if team_id: self.roll_messages[team_id] = new_message 
+                    else:
+                        logger.error(f"Cannot send new message for team {team_id}, channel context lost.")
+                else:
+                    logger.error(f"HTTPException editing roll message for team {team_id}: {http_error}", exc_info=True)
+                    if interaction: await interaction.followup.send("Error updating roll display.", ephemeral=True)
+            except Exception as e:
+                logger.error(f"Generic error updating roll message for team {team_id}: {e}", exc_info=True)
+                if interaction: await interaction.followup.send("An error occurred while updating the roll display.", ephemeral=True)
+
+        except Exception as e:
+            logger.error(f"Error in process_roll_progression for team {team_id if 'team_id' in locals() else 'UNKNOWN'}: {str(e)}", exc_info=True)
+            if interaction and not interaction.response.is_done():
+                await interaction.response.send_message(f"An error occurred processing the roll: {str(e)}", ephemeral=True)
+            elif interaction:
+                try:
+                    await interaction.followup.send(f"An error occurred processing the roll: {str(e)}", ephemeral=True)
+                except Exception as followup_e:
+                    logger.error(f"Failed to send followup error message: {followup_e}")
+
 class RollBaseView(discord.ui.View):
     def __init__(self, cog, event_id: str, team_id: str, initiator_id: str, roll_message: discord.Message):
         super().__init__(timeout=0)  # Keep the view active indefinitely
@@ -702,7 +820,7 @@ class RollCrossroadView(RollBaseView):
             # Call API to choose direction
             logger.debug(f"Calling API to choose direction {direction_id}")
             success, response_data = await self.cog.call_backend_api(
-                f"/events/{self.event_id}/teams/{self.team_id}/roll/direction",
+                f"/events/{self.event_id}/teams/{self.team_id}/roll/crossroad",
                 payload={"directionId": direction_id},
                 method="POST"
             )
@@ -726,7 +844,6 @@ class RollCrossroadView(RollBaseView):
             
         return callback
 
-# Update other view classes similarly
 class RollShopView(RollBaseView):
     def __init__(self, cog, event_id: str, team_id: str, available_items: list, team_coins: int, initiator_id: str, roll_message: discord.Message):
         super().__init__(cog, event_id, team_id, initiator_id, roll_message)
@@ -828,7 +945,7 @@ class RollShopView(RollBaseView):
             await self.roll_message.edit(embed=embed, view=item_view)
             
             # Let the user know the item details are displayed
-            await interaction.followup.send(f"Viewing details for {item_name}.", ephemeral=True)
+            #await interaction.followup.send(f"Viewing details for {item_name}.", ephemeral=True)
         
         return view_item_callback
     
@@ -895,7 +1012,7 @@ class RollShopView(RollBaseView):
         await self.cog.process_roll_progression(interaction, response_data)
         
         # Let the user know their selection was received
-        await interaction.followup.send("Continuing journey without buying anything! Check the updated message.", ephemeral=True)
+        #await interaction.followup.send("Continuing journey without buying anything! Check the updated message.", ephemeral=True)
 
 class RollStarView(RollBaseView):
     def __init__(self, cog, event_id: str, team_id: str, cost: int, initiator_id: str, roll_message: discord.Message):
@@ -976,141 +1093,15 @@ class RollStarView(RollBaseView):
         # Let the user know their selection was received
         await interaction.followup.send("Continuing journey! Check the updated message.", ephemeral=True)
 
-class RollDockView(RollBaseView):
-    def __init__(self, cog, event_id: str, team_id: str, destinations: list, charter_price: int, team_coins: int, initiator_id: str, roll_message: discord.Message):
-        super().__init__(cog, event_id, team_id, initiator_id, roll_message)
-        self.destinations = destinations
-        self.charter_price = charter_price
-        self.team_coins = team_coins
-        
-        logger.debug(f"Creating DockView with {len(destinations)} destinations, price: {charter_price}, available coins: {team_coins}")
-        
-        # Only add destinations that the team can afford
-        affordable_destinations = []
-        for dest in destinations:
-            dest_name = dest.get("name", "Unknown")
-            dest_id = dest.get("id", "")
-            affordable = team_coins >= charter_price
-            
-            if affordable:
-                affordable_destinations.append((dest_name, dest_id))
-                logger.debug(f"Adding affordable destination: {dest_name} (ID: {dest_id})")
-            else:
-                logger.debug(f"Skipping unaffordable destination: {dest_name} (ID: {dest_id})")
-        
-        # Add buttons for each destination the team can afford
-        for dest_name, dest_id in affordable_destinations:
-            button = discord.ui.Button(
-                label=f"Travel to {dest_name} ({charter_price} coins)",
-                style=discord.ButtonStyle.primary,
-                custom_id=f"dock_dest_{dest_id}"
-            )
-            
-            button.callback = self.create_travel_callback(dest_id, dest_name)
-            self.add_item(button)
-        
-        # Add a "Continue Journey" button 
-        continue_button = discord.ui.Button(
-            label="Continue Journey",
-            style=discord.ButtonStyle.secondary,
-            custom_id="dock_continue"
-        )
-        continue_button.callback = self.continue_journey
-        self.add_item(continue_button)
-        logger.debug("Added continue journey button to dock view")
-    
-    def create_travel_callback(self, destination_id: str, destination_name: str):
-        """Create a callback function for traveling to a destination"""
-        async def travel_callback(interaction: discord.Interaction):
-            logger.info(f"User {interaction.user.id} is attempting to travel to {destination_name} ({destination_id}) for {self.charter_price} coins")
-            await interaction.response.defer(ephemeral=True)
-            
-            # Call API to travel to the destination
-            success, response_data = await self.cog.call_backend_api(
-                f"/events/{self.event_id}/teams/{self.team_id}/roll/dock",
-                payload={"action": "charter", "destination_island_id": destination_id},
-                method="POST"
-            )
-            
-            if not success:
-                logger.error(f"Failed to travel to destination {destination_id}: {response_data}")
-                await interaction.followup.send(f"Failed to charter ship: {response_data}", ephemeral=True)
-                return
-            
-            logger.info(f"Successfully chartered ship to {destination_name} for {self.charter_price} coins")
-            
-            # Show travel confirmation in the existing message
-            travel_cost = response_data.get("travelCost", self.charter_price)
-            team_coins = response_data.get("teamCoins", self.team_coins - travel_cost)
-            new_tile_id = response_data.get("newTileId", "Unknown")
-            
-            # Update the embed
-            travel_embed = discord.Embed(
-                title="⚓ Ship Chartered!",
-                description=f"You traveled to **{destination_name}** for {travel_cost} coins. Your team now has {team_coins} coins remaining.",
-                color=discord.Color.blue()
-            )
-            
-            travel_embed.add_field(
-                name="New Location",
-                value=f"You are now on tile {new_tile_id} ({destination_name})",
-                inline=False
-            )
-            
-            # Disable all buttons after selection
-            for item in self.children:
-                item.disabled = True
-            
-            # Update the message
-            await self.roll_message.edit(embed=travel_embed, view=self)
-            
-            # Process next step or end roll
-            next_response = response_data.get("nextStep", {})
-            if next_response:
-                await self.cog.process_roll_progression(interaction, next_response)
-            else:
-                # If no next step, then we're done with the roll
-                if self.team_id in self.cog.active_rolls:
-                    del self.cog.active_rolls[self.team_id]
-                    logger.info(f"Cleaned up active roll for team {self.team_id} after traveling to {destination_name}")
-            
-            # Let the user know their selection was registered
-            await interaction.followup.send(f"Ship chartered to {destination_name}! Check the updated message.", ephemeral=True)
-            
-        return travel_callback
-    
-    async def continue_journey(self, interaction: discord.Interaction):
-        """Continue the journey without chartering a ship"""
-        logger.info(f"User {interaction.user.id} chose to continue journey without chartering a ship")
-        await interaction.response.defer(ephemeral=True)
-        
-        # Call API to continue the journey
-        success, response_data = await self.cog.call_backend_api(
-            f"/events/{self.event_id}/teams/{self.team_id}/roll/continue",
-            method="POST"
-        )
-        
-        if not success:
-            logger.error(f"Failed to continue journey: {response_data}")
-            await interaction.followup.send(f"Failed to continue journey: {response_data}", ephemeral=True)
-            return
-        
-        logger.debug(f"Continue journey API response: {json.dumps(response_data)[:200]}...")
-        
-        # Process the next step of the roll
-        await self.cog.process_roll_progression(interaction, response_data)
-        
-        # Let the user know their selection was received
-        await interaction.followup.send("Continuing journey without chartering a ship! Check the updated message.", ephemeral=True)
-
 class RollDockInitialView(RollBaseView):
-    def __init__(self, cog, event_id: str, team_id: str, destinations: list, charter_price: int, team_coins: int, initiator_id: str, roll_message: discord.Message):
+    def __init__(self, cog, event_id: str, team_id: str, destinations: list, team_coins: int, 
+                 initiator_id: str, roll_message: discord.Message, active_roll_context: dict = None):
         super().__init__(cog, event_id, team_id, initiator_id, roll_message)
         self.destinations = destinations
-        self.charter_price = charter_price
         self.team_coins = team_coins
+        self.active_roll_context = active_roll_context or {}
         
-        logger.debug(f"Creating DockInitialView with {len(destinations)} destinations, price: {charter_price}, available coins: {team_coins}")
+        logger.debug(f"Creating DockInitialView with {len(destinations)} destinations, available coins: {team_coins}")
         
         # Add "View Destinations" button
         view_destinations_button = discord.ui.Button(
@@ -1139,7 +1130,7 @@ class RollDockInitialView(RollBaseView):
         # Create a detailed embed showing all destinations
         embed = discord.Embed(
             title="⚓ Available Islands",
-            description=f"Choose an island to charter a ship to (Cost: {self.charter_price} coins each)",
+            description=f"Choose an island to charter a ship to",
             color=discord.Color.blue()
         )
         
@@ -1148,14 +1139,15 @@ class RollDockInitialView(RollBaseView):
             name = dest.get("name", "Unknown Location")
             description = dest.get("description", "No description available.")
             dest_id = dest.get("id", "")
+            charter_price = dest.get("cost", 0)
             
             # Check if the team can afford this destination
-            affordable = self.team_coins >= self.charter_price
+            affordable = self.team_coins >= charter_price
             status = "✅ Available" if affordable else "❌ Not enough coins"
             
             embed.add_field(
                 name=f"{name}",
-                value=f"{description}\n**Status:** {status}",
+                value=f"{description}\n**Status:** {status}\n**Cost:** {charter_price} coins",
                 inline=False
             )
         
@@ -1165,7 +1157,6 @@ class RollDockInitialView(RollBaseView):
             self.event_id,
             self.team_id,
             self.destinations,
-            self.charter_price,
             self.team_coins,
             self.initiator_id,
             self.roll_message
@@ -1175,7 +1166,7 @@ class RollDockInitialView(RollBaseView):
         await self.roll_message.edit(embed=embed, view=destination_view)
         
         # Let the user know the destinations are displayed
-        await interaction.followup.send("Viewing available islands! Check the updated message.", ephemeral=True)
+        #await interaction.followup.send("Viewing available islands! Check the updated message.", ephemeral=True)
     
     async def continue_journey(self, interaction: discord.Interaction):
         """Continue the journey without chartering a ship"""
@@ -1199,16 +1190,15 @@ class RollDockInitialView(RollBaseView):
         await self.cog.process_roll_progression(interaction, response_data)
         
         # Let the user know their selection was received
-        await interaction.followup.send("Continuing journey without chartering a ship! Check the updated message.", ephemeral=True)
+        #await interaction.followup.send("Continuing journey without chartering a ship! Check the updated message.", ephemeral=True)
 
 class RollDockSelectorView(RollBaseView):
-    def __init__(self, cog, event_id: str, team_id: str, destinations: list, charter_price: int, team_coins: int, initiator_id: str, roll_message: discord.Message):
+    def __init__(self, cog, event_id: str, team_id: str, destinations: list, team_coins: int, initiator_id: str, roll_message: discord.Message):
         super().__init__(cog, event_id, team_id, initiator_id, roll_message)
         self.destinations = destinations
-        self.charter_price = charter_price
         self.team_coins = team_coins
         
-        logger.debug(f"Creating DockSelectorView with {len(destinations)} destinations, price: {charter_price}, available coins: {team_coins}")
+        logger.debug(f"Creating DockSelectorView with {len(destinations)} destinations, available coins: {team_coins}")
         
         # Add a Select menu for destinations
         options = []
@@ -1218,6 +1208,7 @@ class RollDockSelectorView(RollBaseView):
             dest_name = dest.get("name", "Unknown Location")
             dest_id = dest.get("id", "")
             dest_desc = dest.get("description", "")
+            charter_price = dest.get("cost", 0)
             affordable = team_coins >= charter_price
             
             # Truncate description if too long for the select option
@@ -1228,6 +1219,8 @@ class RollDockSelectorView(RollBaseView):
             self.destination_map[select_value] = {
                 "id": dest_id,
                 "name": dest_name,
+                "description": dest_desc,
+                "cost": charter_price,
                 "affordable": affordable
             }
             
@@ -1292,13 +1285,14 @@ class RollDockSelectorView(RollBaseView):
         
         dest_name = dest_info.get("name", "Unknown")
         dest_id = dest_info.get("id", "")
+        dest_price = dest_info.get("cost", 0)
         affordable = dest_info.get("affordable", False)
         
         logger.debug(f"Selected destination: {dest_name} (ID: {dest_id}, Affordable: {affordable})")
         
         if not affordable:
             logger.warning(f"User selected unaffordable destination: {dest_name}")
-            await interaction.followup.send(f"You don't have enough coins to charter a ship to {dest_name}. You need {self.charter_price} coins.", ephemeral=True)
+            await interaction.followup.send(f"You don't have enough coins to charter a ship to {dest_name}. You need {dest_price} coins.", ephemeral=True)
             
             # Reset the selection
             self.destination_select.placeholder = "Select an island to travel to..."
@@ -1317,7 +1311,7 @@ class RollDockSelectorView(RollBaseView):
         await self.roll_message.edit(view=self)
         
         # Let the user know their selection was recorded
-        await interaction.followup.send(f"You selected {dest_name}. Click 'Charter Ship' to confirm your travel.", ephemeral=True)
+        #await interaction.followup.send(f"You selected {dest_name}. Click 'Charter Ship' to confirm your travel.", ephemeral=True)
     
     async def on_confirm(self, interaction: discord.Interaction):
         """Handle confirmation of travel to selected destination"""
@@ -1331,13 +1325,14 @@ class RollDockSelectorView(RollBaseView):
         
         dest_id = self.selected_destination.get("id", "")
         dest_name = self.selected_destination.get("name", "Unknown")
+        dest_cost = self.selected_destination.get("cost", 0)
         
-        logger.info(f"Chartering ship to {dest_name} (ID: {dest_id}) for {self.charter_price} coins")
+        logger.info(f"Chartering ship to {dest_name} (ID: {dest_id}) for {dest_cost} coins")
         
         # Call API to travel to the destination
         success, response_data = await self.cog.call_backend_api(
             f"/events/{self.event_id}/teams/{self.team_id}/roll/dock",
-            payload={"action": "charter", "destinationId": dest_id},
+            payload={"action": "charter", "destinationId": dest_id, "cost": dest_cost},
             method="POST"
         )
         
@@ -1346,10 +1341,10 @@ class RollDockSelectorView(RollBaseView):
             await interaction.followup.send(f"Failed to charter ship: {response_data}", ephemeral=True)
             return
         
-        logger.info(f"Successfully chartered ship to {dest_name} for {self.charter_price} coins")
+        logger.info(f"Successfully chartered ship to {dest_name} for {dest_cost} coins")
         
         # Show travel confirmation in the existing message
-        travel_cost = response_data.get("travelCost", self.charter_price)
+        travel_cost = response_data.get("travelCost", dest_cost)
         team_coins = response_data.get("teamCoins", self.team_coins - travel_cost)
         new_tile_id = response_data.get("newTileId", "Unknown")
         
@@ -1383,8 +1378,11 @@ class RollDockSelectorView(RollBaseView):
                 del self.cog.active_rolls[self.team_id]
                 logger.info(f"Cleaned up active roll for team {self.team_id} after traveling to {dest_name}")
         
+        # Process the next step of the roll
+        await self.cog.process_roll_progression(interaction, response_data)
+        
         # Let the user know their selection was registered
-        await interaction.followup.send(f"Ship chartered to {dest_name}! Check the updated message.", ephemeral=True)
+        #await interaction.followup.send(f"Ship chartered to {dest_name}! Check the updated message.", ephemeral=True)
     
     async def on_cancel(self, interaction: discord.Interaction):
         """Cancel selection and go back to initial dock view"""
@@ -1426,13 +1424,14 @@ class RollDockSelectorView(RollBaseView):
         await self.roll_message.edit(embed=embed, view=initial_view)
         
         # Let the user know they've returned to the initial view
-        await interaction.followup.send("Returning to ship charter options.", ephemeral=True)
+        #await interaction.followup.send("Returning to ship charter options.", ephemeral=True)
 
 class RollShopInitialView(RollBaseView):
-    def __init__(self, cog, event_id: str, team_id: str, available_items: list, team_coins: int, initiator_id: str, roll_message: discord.Message):
+    def __init__(self, cog, event_id: str, team_id: str, available_items: list, team_coins: int, initiator_id: str, roll_message: discord.Message, active_roll_context: dict = None):
         super().__init__(cog, event_id, team_id, initiator_id, roll_message)
         self.available_items = available_items
         self.team_coins = team_coins
+        self.active_roll_context = active_roll_context or {}
         
         logger.debug(f"Creating ShopInitialView with {len(available_items)} items and {team_coins} coins")
         
@@ -1473,6 +1472,9 @@ class RollShopInitialView(RollBaseView):
             description = item.get("description", "No description available.")
             price = item.get("price", 0)
             item_id = item.get("id", "")
+            rarity = item.get("rarity", "common").capitalize()
+            image = item.get("image", "")
+            item_type = item.get("item_type", "Unknown")
             
             # Check if the team can afford this item
             affordable = self.team_coins >= price
@@ -1483,8 +1485,7 @@ class RollShopInitialView(RollBaseView):
                 value=f"{description}\n**Price:** {price} coins\n**Status:** {status}",
                 inline=False
             )
-        
-        # Create a selector view with all items
+          # Create a selector view with all items
         shop_view = RollShopView(
             self.cog,
             self.event_id,
@@ -1499,7 +1500,7 @@ class RollShopInitialView(RollBaseView):
         await self.roll_message.edit(embed=embed, view=shop_view)
         
         # Let the user know the items are displayed
-        await interaction.followup.send("Viewing available items! Check the updated message.", ephemeral=True)
+        #await interaction.followup.send("Viewing available items! Check the updated message.", ephemeral=True)
     
     async def continue_journey(self, interaction: discord.Interaction):
         """Continue the journey without buying anything"""
@@ -1523,7 +1524,7 @@ class RollShopInitialView(RollBaseView):
         await self.cog.process_roll_progression(interaction, response_data)
         
         # Let the user know their selection was received
-        await interaction.followup.send("Continuing journey without buying anything! Check the updated message.", ephemeral=True)
+        #await interaction.followup.send("Continuing journey without buying anything! Check the updated message.", ephemeral=True)
 
 class RollShopItemView(RollBaseView):
     def __init__(self, cog, event_id: str, team_id: str, item: dict, team_coins: int, all_items: list, initiator_id: str, roll_message: discord.Message):
@@ -1580,7 +1581,7 @@ class RollShopItemView(RollBaseView):
         # Call API to buy the item
         success, response_data = await self.cog.call_backend_api(
             f"/events/{self.event_id}/teams/{self.team_id}/roll/shop",
-            payload={"action": "buy", "itemId": self.item_id},
+            payload={"action": "buy", "itemId": self.item_id, "price": item_price},
             method="POST"
         )
         
@@ -1597,7 +1598,7 @@ class RollShopItemView(RollBaseView):
         # Update the embed to show the purchase
         purchase_embed = discord.Embed(
             title="🛒 Purchase Complete!",
-            description=f"You purchased **{item_name}** for {item_price} coins. Your team now has {team_coins} coins remaining.",
+            description=f"You purchased **{item_name}** for {item_price} coins. Your team now has {team_coins} coins remaining.\n\nRoll is now continuing...",
             color=discord.Color.green()
         )
         
@@ -1614,6 +1615,9 @@ class RollShopItemView(RollBaseView):
         
         # Update the message
         await self.roll_message.edit(embed=purchase_embed, view=self)
+
+        logger.info(f"Waiting 3 seconds before continuing roll progression after purchase of {item_name}")
+        await asyncio.sleep(3)
         
         # Process next step of roll as shops only allow one purchase
         next_response = response_data.get("nextStep", {})
@@ -1626,8 +1630,10 @@ class RollShopItemView(RollBaseView):
                 del self.cog.active_rolls[self.team_id]
                 logger.info(f"Cleaned up active roll for team {self.team_id} after item purchase")
         
+        # Process the next step of the roll
+        await self.cog.process_roll_progression(interaction, response_data)
         # Let the user know their purchase was successful
-        await interaction.followup.send(f"You purchased {item_name}! Check the updated message.", ephemeral=True)
+        #await interaction.followup.send(f"You purchased {item_name}! Check the updated message.", ephemeral=True)
     
     async def back_to_items(self, interaction: discord.Interaction):
         """Go back to the shop items list"""
@@ -1656,7 +1662,7 @@ class RollShopItemView(RollBaseView):
         await self.roll_message.edit(embed=embed, view=shop_view)
         
         # Let the user know they've returned to the item list
-        await interaction.followup.send("Returning to item list.", ephemeral=True)
+        #await interaction.followup.send("Returning to item list.", ephemeral=True)
     
     async def continue_journey(self, interaction: discord.Interaction):
         """Continue the journey without buying anything"""
@@ -1680,7 +1686,88 @@ class RollShopItemView(RollBaseView):
         await self.cog.process_roll_progression(interaction, response_data)
         
         # Let the user know their selection was received
-        await interaction.followup.send("Continuing journey without buying anything! Check the updated message.", ephemeral=True)
+        #await interaction.followup.send("Continuing journey without buying anything! Check the updated message.", ephemeral=True)
+
+class FirstRollIslandSelectView(RollBaseView): # Inherit from RollBaseView
+    def __init__(self, cog, event_id: str, team_id: str, 
+                 available_islands: list, first_roll_total: int, 
+                 initiator_id: str, 
+                 roll_message: discord.Message): 
+        super().__init__(cog, event_id, team_id, initiator_id, roll_message)
+        
+        self.first_roll_total = first_roll_total
+
+        if not available_islands:
+            logger.warning(f"FirstRollIslandSelectView initialized for team {team_id} with no available islands.")
+            # Optionally add a disabled item or label to the view
+            # self.add_item(discord.ui.Button(label="No islands available", disabled=True))
+            return
+
+        select_options = []
+        for island in available_islands:
+            select_options.append(discord.SelectOption(
+                label=island.get("name", "Unknown Island")[:100], 
+                value=str(island.get("id")), 
+                description=(island.get("description", "") or "Select this island.")[:100] 
+            ))
+        
+        if len(select_options) > 25:
+            logging.warning(f"Too many islands ({len(select_options)}) for select menu for team {team_id}. Truncating to 25.")
+            select_options = select_options[:25]
+        
+        if not select_options: 
+             logging.error(f"No valid island options to display for team {team_id} after processing.")
+             return
+
+        island_select = discord.ui.Select(
+            placeholder="Choose your starting island...",
+            options=select_options,
+            custom_id=f"sp3_island_select:{team_id}" 
+        )
+        island_select.callback = self.island_select_callback
+        self.add_item(island_select)
+        logger.debug(f"FirstRollIslandSelectView populated with {len(select_options)} islands for team {team_id}.")
+
+    async def island_select_callback(self, interaction: discord.Interaction):
+        chosen_island_id = interaction.data["values"][0]
+        # --- CORRECTED DEFER CALL ---
+        await interaction.response.defer(ephemeral=True) 
+        # --- END CORRECTION ---
+
+        logger.info(f"Team {self.team_id} (Initiator: {self.initiator_id}) selected island {chosen_island_id}. First roll total was {self.first_roll_total}.")
+
+        try:
+            action_type_island_selection = "island_selection" # Use string directly
+            # Fallback logic if ACTION_TYPES is defined in cog or globally (less likely for this view)
+            # if hasattr(self.cog, 'ACTION_TYPES') and "ISLAND_SELECTION" in self.cog.ACTION_TYPES:
+            #      action_type_island_selection = self.cog.ACTION_TYPES["ISLAND_SELECTION"]
+            # elif 'ACTION_TYPES' in globals() and "ISLAND_SELECTION" in globals()['ACTION_TYPES']:
+            #      action_type_island_selection = globals()['ACTION_TYPES']["ISLAND_SELECTION"]
+
+
+            success, response_data = await self.cog.call_backend_api( 
+                f"/events/{self.event_id}/teams/{self.team_id}/roll/first_island", 
+                method="POST",
+                payload={ 
+                    "chosen_island_id": chosen_island_id,
+                    "first_roll_total": self.first_roll_total 
+                }
+            )
+
+            if success and response_data:
+                await self.cog.process_roll_progression(
+                    interaction=interaction, 
+                    response_data=response_data,
+                    existing_message=self.roll_message 
+                )
+                await interaction.followup.send(f"You selected island {chosen_island_id}. The game is updating...", ephemeral=True)
+            else:
+                error_message = response_data.get("error", "Failed to process island selection.") if isinstance(response_data, dict) else "Unknown error from API."
+                logger.error(f"API call for island selection failed for team {self.team_id}: {error_message}")
+                await interaction.followup.send(f"Error processing island selection: {error_message}", ephemeral=True)
+        except Exception as e:
+            logger.error(f"Exception during island selection callback for team {self.team_id}: {e}", exc_info=True)
+            await interaction.followup.send(f"An unexpected error occurred: {str(e)[:1000]}", ephemeral=True)
 
 def setup(bot):
     logger.info("Adding EventUser cog to bot")

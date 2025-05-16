@@ -20,7 +20,7 @@ from cogs.api_server import Api
 from cogs.apply import Apply
 from cogs.check_avatar_update import CheckAvatarUpdate
 from cogs.gear import Gear
-from cogs.submit import Submit
+from cogs.submit import Submit, SubmitKC
 from cogs.rename import Rename
 from cogs.cron_update_nicknames import UpdateNicknames
 from cogs.event_mod import EventMod
@@ -51,6 +51,7 @@ bot.add_cog(Apply(bot))
 bot.add_cog(CheckAvatarUpdate(bot))
 bot.add_cog(Gear(bot))
 bot.add_cog(Submit(bot))
+bot.add_cog(SubmitKC(bot))
 bot.add_cog(Rename(bot))
 bot.add_cog(UpdateNicknames(bot))
 bot.add_cog(EventMod(bot))
