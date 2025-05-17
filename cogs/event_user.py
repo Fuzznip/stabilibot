@@ -229,8 +229,8 @@ class EventUser(commands.Cog):
             logger.error(traceback.format_exc())
             return False, f"Unexpected error: {str(e)}"
     
-    # Get Team Stats Command
-    @discord.slash_command(name="event_stats", description="View your team's current stats and location", guild_ids=[int(os.getenv("GUILD_ID"))])
+    
+    @discord.slash_command(name="stats", description="View your team's current stats and location, as well as event news and info", guild_ids=[int(os.getenv("GUILD_ID"))])
     async def get_stats(self, interaction):
         logger.info(f"{interaction.user.display_name} ({interaction.user.id}): /event_stats")
         
@@ -260,26 +260,26 @@ class EventUser(commands.Cog):
             await interaction.followup.send(f"Failed to get team stats: {response_data}")
             return
         
-        # Create a detailed embed with the team stats
+        # Extract essential information
         team_name = response_data.get("team_name", "Unknown Team")
-        members = response_data.get("members", [])
         stars = response_data.get("stars", 0)
         coins = response_data.get("coins", 0)
         
+        # Get location info
         current_location = response_data.get("current_location", {})
-        tile_num = current_location.get("tile", 0)
         tile_info = current_location.get("tile_info", {})
         region_info = current_location.get("region", {})
+        current_region_name = region_info.get("name", "Unknown Region")
         tile_completed = response_data.get("tile_completed", False)
-        
-        buffs = response_data.get("buffs", [])
-        debuffs = response_data.get("debuffs", [])
-        items = response_data.get("items", [])
         is_rolling = response_data.get("is_rolling", False)
+        
+        # Get event star locations
+        event_star_locations = response_data.get("event_star_locations", [])
         
         # Build the embed
         embed = discord.Embed(
-            title=f"{team_name} Stats",
+            title=f"{team_name}",
+            description=f"**Current Status:** {'✅ Completed' if tile_completed else '🔄 In Progress'}{' (Rolling)' if is_rolling else ''}",
             color=discord.Color.gold() if stars > 0 else discord.Color.blue()
         )
         
@@ -287,39 +287,30 @@ class EventUser(commands.Cog):
         embed.add_field(name="⭐ Stars", value=str(stars), inline=True)
         embed.add_field(name="💰 Coins", value=str(coins), inline=True)
         
-        # Add location info
-        location_value = f"Tile #{tile_num}"
-        if tile_info:
-            location_value += f" - {tile_info.get('name', 'Unknown')}"
+        # Add current location info
+        location_value = f"{tile_info.get('name', 'Unknown Tile')}"
         if region_info:
-            location_value += f"\nRegion: {region_info.get('name', 'Unknown')}"
-        location_value += f"\nStatus: {'✅ Completed' if tile_completed else '🔄 In Progress'}"
-        if is_rolling:
-            location_value += " (Rolling)"
+            location_value += f"\nRegion: **{current_region_name}**"
         
         embed.add_field(name="📍 Current Location", value=location_value, inline=False)
         
-        # Add members list
-        if members:
-            embed.add_field(name="👥 Team Members", value="\n".join([f"• {member}" for member in members]), inline=False)
-        
-        # Add buffs, debuffs, and items if there are any
-        if buffs:
-            embed.add_field(name="✨ Active Buffs", value="\n".join([f"• {buff}" for buff in buffs]) or "None", inline=True)
-        
-        if debuffs:
-            embed.add_field(name="☠️ Active Debuffs", value="\n".join([f"• {debuff}" for debuff in debuffs]) or "None", inline=True)
-        
-        if items:
-            item_names = []
-            for item in items:
-                if isinstance(item, dict):
-                    item_names.append(f"• {item.get('name', 'Unknown Item')}")
+        # Add event star locations, highlighting those in the team's current region
+        if event_star_locations:
+            star_locations_text = ""
+            for location in event_star_locations:
+                star_region = location.get("region", "Unknown")
+                star_name = location.get("name", "Unknown")
+                star_description = location.get("description", "")
+                
+                # Highlight stars in the current region
+                if star_region == current_region_name:
+                    star_locations_text += f"**▶️ {star_name}** - {star_region} 🔍\n"
+                    if star_description:
+                        star_locations_text += f"   *{star_description}*\n"
                 else:
-                    item_names.append(f"• {item}")
+                    star_locations_text += f"• {star_name} - {star_region}\n"
             
-            if item_names:
-                embed.add_field(name="🎒 Inventory", value="\n".join(item_names), inline=False)
+            embed.add_field(name="⭐ Event Star Locations", value=star_locations_text or "None available", inline=False)
         
         await interaction.followup.send(embed=embed)
     
