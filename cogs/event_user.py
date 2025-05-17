@@ -349,47 +349,57 @@ class EventUser(commands.Cog):
             f"/events/{event_id}/teams/{team_id}/tile-progress",
             method="GET"
         )
-        
+
         if not success:
             await interaction.followup.send(f"Failed to get tile progress: {response_data}")
             return
         
         # Extract tile information
-        tile_number = response_data.get("tile_number", 0)
-        tile_type = response_data.get("tile_type", "Unknown")
-        tile_name = response_data.get("tile_name", "Unknown")
+        team_name = response_data.get("team_name", "Unknown Team")
+        tile_name = response_data.get("current_tile", "Unknown")
+        region_name = response_data.get("current_region", "Unknown")
         tile_description = response_data.get("tile_description", "No description available")
-        is_completed = response_data.get("is_completed", False)
-        progress = response_data.get("progress", {})
-        can_roll = response_data.get("can_roll", False)
+        is_completed = response_data.get("is_tile_completed", False)
+        tile_progress = response_data.get("tile_progress", [])
+        region_progress = response_data.get("region_progress", [])
+        is_rolling = response_data.get("is_rolling", False)
         
         # Create a detailed embed with tile information
         embed = discord.Embed(
-            title=f"Tile #{tile_number}: {tile_name}",
+            title=f"{region_name} - {tile_name}",
             description=tile_description,
             color=discord.Color.green() if is_completed else discord.Color.blue()
         )
         
         # Add tile type
-        embed.add_field(name="Type", value=tile_type, inline=True)
+        embed.add_field(name="Region", value=region_name, inline=True)
         embed.add_field(name="Status", value="✅ Completed" if is_completed else "🔄 In Progress", inline=True)
         
-        # Add progress information if there's any
-        if progress:
+        if not is_completed:
+            # Add progress information if there's any
             progress_text = ""
-            for challenge_key, challenge_data in progress.items():
-                if isinstance(challenge_data, dict):
-                    for task, status in challenge_data.items():
-                        progress_text += f"• {task}: {'✅' if status else '❌'}\n"
-                else:
-                    progress_text += f"• {challenge_key}: {challenge_data}\n"
-            
+            for progress_string in region_progress:
+                progress_text += f"• {progress_string}\n"
+
             if progress_text:
-                embed.add_field(name="Challenge Progress", value=progress_text, inline=False)
+                # if it's over the size limit, truncate it
+                if len(progress_text) > 1024:
+                    progress_text = progress_text[:1021] + "..."
+                embed.add_field(name="Region Progress", value=progress_text, inline=False)
+
+            progress_text = ""
+            for progress_string in tile_progress:
+                progress_text += f"• {progress_string}\n"
+
+            if progress_text:
+                # if it's over the size limit, truncate it
+                if len(progress_text) > 1024:
+                    progress_text = progress_text[:1021] + "..."
+                embed.add_field(name="Tile Progress", value=progress_text, inline=False)
         
         # Add action hint
-        if can_roll:
-            embed.add_field(name="Available Action", value="You can roll the dice! Use `/event_roll`", inline=False)
+        if not is_rolling and is_completed:
+            embed.add_field(name="Available Action", value="You can roll! Use `/roll`", inline=False)
         elif is_completed:
             embed.add_field(name="Next Steps", value="Waiting for your team to roll", inline=False)
         else:
