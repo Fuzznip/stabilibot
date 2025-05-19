@@ -26,7 +26,7 @@ class DropSubmissionModal(ui.Modal):
         payload = {
             "submission_type": "drop",
             "timestamp": self.message.created_at.isoformat(),
-            "user": self.message.author.name,
+            "user": self.message.author.display_name,
             "discord_id": str(self.message.author.id),
             "item_name": self.questionItemName.value,
             "source": self.questionItemSource.value,
@@ -97,7 +97,7 @@ class KCSubmissionModal(ui.Modal):
         payload = {
             "submission_type": "kc",
             "timestamp": self.message.created_at.isoformat(),
-            "user": self.message.author.nick if self.message.author.nick is not None else self.message.author.name,
+            "user": self.message.author.display_name,
             "discord_id": str(self.message.author.id),
             "boss_name": self.questionBossName.value,
             "kill_count": self.questionKCCount.value,
