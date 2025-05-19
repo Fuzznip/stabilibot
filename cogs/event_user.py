@@ -1081,7 +1081,7 @@ class RollStarView(RollBaseView):
         
         # Add buttons: Buy Star or Skip
         self.add_item(discord.ui.Button(
-            label=f"Buy Star ({cost} coins)" if available_coins >= cost else "Cannot Buy Star ({cost} coins)",
+            label=f"Buy Star ({cost} coins)" if available_coins >= cost else f"Cannot Buy Star ({cost} coins)",
             style=discord.ButtonStyle.primary,
             custom_id="star_buy",
             disabled=(available_coins < cost)
