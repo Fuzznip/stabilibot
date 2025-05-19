@@ -229,7 +229,6 @@ class EventUser(commands.Cog):
             logger.error(traceback.format_exc())
             return False, f"Unexpected error: {str(e)}"
     
-    
     @discord.slash_command(name="stats", description="View your team's current stats and location, as well as event news and info", guild_ids=[int(os.getenv("GUILD_ID"))])
     async def get_stats(self, interaction):
         logger.info(f"{interaction.user.display_name} ({interaction.user.id}): /event_stats")
@@ -279,36 +278,52 @@ class EventUser(commands.Cog):
         # Build the embed
         embed = discord.Embed(
             title=f"{team_name}",
-            description=f"**Current Status:** {'✅ Completed' if tile_completed else '🔄 In Progress'}{' (Rolling)' if is_rolling else ''}",
             color=discord.Color.gold() if stars > 0 else discord.Color.blue()
         )
+        
+        # Current location section
+        location_value = f"**{tile_info.get('name', 'Unknown Tile')}** in **{current_region_name}**"
+        if is_rolling:
+            location_value += " (Rolling in progress)"
+        elif tile_completed:
+            location_value += " (Ready to roll!)"
+            
+        embed.description = location_value
         
         # Add basic stats
         embed.add_field(name="⭐ Stars", value=str(stars), inline=True)
         embed.add_field(name="💰 Coins", value=str(coins), inline=True)
         
-        # Add current location info
-        location_value = f"{tile_info.get('name', 'Unknown Tile')}"
-        if region_info:
-            location_value += f"\nRegion: **{current_region_name}**"
-        
-        embed.add_field(name="📍 Current Location", value=location_value, inline=False)
-        
         # Add event star locations, highlighting those in the team's current region
         if event_star_locations:
             star_locations_text = ""
+            current_region_stars = []
+            other_region_stars = []
+            
+            # Sort stars by current region first
             for location in event_star_locations:
                 star_region = location.get("region", "Unknown")
                 star_name = location.get("name", "Unknown")
                 star_description = location.get("description", "")
                 
-                # Highlight stars in the current region
+                star_text = f"**{star_name}**"
+                if star_description:
+                    star_text += f"\n*{star_description}*"
+                
                 if star_region == current_region_name:
-                    star_locations_text += f"**▶️ {star_name}** - {star_region} 🔍\n"
-                    if star_description:
-                        star_locations_text += f"   *{star_description}*\n"
+                    current_region_stars.append(f"🔍 {star_text} [{star_region}]")
                 else:
-                    star_locations_text += f"• {star_name} - {star_region}\n"
+                    other_region_stars.append(f"• {star_text} [{star_region}]")
+            
+            # Add current region stars first with a heading
+            if current_region_stars:
+                star_locations_text += "**Stars in your region:**\n"
+                star_locations_text += "\n".join(current_region_stars) + "\n\n"
+            
+            # Then add other stars
+            if other_region_stars:
+                star_locations_text += "**Other star locations:**\n"
+                star_locations_text += "\n".join(other_region_stars)
             
             embed.add_field(name="⭐ Event Star Locations", value=star_locations_text or "None available", inline=False)
         
@@ -396,8 +411,40 @@ class EventUser(commands.Cog):
         else:
             embed.add_field(name="Next Steps", value="Complete the current tile's challenges", inline=False)
         
-        await interaction.followup.send(embed=embed)
-
+        await interaction.followup.send(embed=embed)    # Helper method to fetch inventory items
+    async def _fetch_inventory_items(self, event_id, team_id):
+        success, response_data = await self.call_backend_api(
+            f"/events/{event_id}/teams/{team_id}/items/inventory",
+            method="GET"
+        )
+        
+        if not success:
+            return [], f"Failed to get items: {response_data}"
+        
+        items = response_data.get("items", [])
+        return items, None
+    
+    # Helper method to build inventory display
+    def _build_inventory_display(self, interaction, event_id, team_id, items, original_message=None):
+        embed = discord.Embed(
+            title="Your Inventory",
+            description=f"You have {len(items)} items in your inventory." if items else "Your inventory is empty.",
+            color=discord.Color.blue()
+        )
+        
+        # Add item list to the embed
+        if items:
+            item_list = "\n".join([f"• {item.get('name', 'Unknown Item')}" for item in items[:10]])
+            if len(items) > 10:
+                item_list += f"\n...and {len(items) - 10} more items"
+            embed.add_field(name="Items", value=item_list, inline=False)
+            embed.set_footer(text="Click on an item button below to view details and use the item")
+        
+        view = InventoryView(self, interaction, str(event_id), str(team_id), items)
+        view.original_message = original_message
+        
+        return embed, view
+    
     @discord.slash_command(name="items", description="View and use items in your inventory", guild_ids=[int(os.getenv("GUILD_ID"))])
     async def view_items(self, interaction):
         logger.info(f"{interaction.user.display_name} ({interaction.user.id}): /items")
@@ -419,32 +466,25 @@ class EventUser(commands.Cog):
             return
         
         # Get items
-        success, response_data = await self.call_backend_api(
-            f"/events/{event_id}/teams/{team_id}/items/inventory",
-            method="GET"
-        )
+        items, error = await self._fetch_inventory_items(event_id, team_id)
         
-        if not success:
-            await interaction.followup.send(f"Failed to get items: {response_data}")
+        if error:
+            await interaction.followup.send(error)
             return
         
-        # Create a detailed embed with the items
-        items = response_data.get("items", [])
-        
-        logging.info(response_data)
+        logging.info(f"Retrieved {len(items)} items for team {team_id}")
+        print(json.dumps(items, indent=2))
 
         if not items:
             await interaction.followup.send("You have no items in your inventory.")
             return
         
-        embed = discord.Embed(
-            title="Your Inventory",
-            color=discord.Color.blue()
-        )
+        # Create inventory display
+        embed, view = self._build_inventory_display(interaction, event_id, team_id, items)
         
-        view = InventoryView(self, interaction, str(event_id), str(team_id), items)
-        
-        await interaction.followup.send(embed=embed, view=view)
+        # Send the message and store the reference
+        inventory_message = await interaction.followup.send(embed=embed, view=view, wait=True)
+        view.original_message = inventory_message
 
     # Roll Dice Command
     @discord.slash_command(name="roll", description="Roll dice to move forward on the board", guild_ids=[int(os.getenv("GUILD_ID"))])
@@ -679,6 +719,7 @@ class EventUser(commands.Cog):
                 logger.info(f"Shop interaction for team {team_id}")
                 embed.title = "🛒 Item Shop!"
                 embed.description = roll_data.data.get("message", "Welcome to the shop!")
+                team_items = roll_data.data.get("team_items", [])
                 available_items = roll_data.data.get("items", [])
                 team_coins = roll_data.data.get("coins", 0)
                 moves_remaining_at_shop = roll_data.data.get("moves_remaining", roll_data.roll_remaining) 
@@ -694,6 +735,7 @@ class EventUser(commands.Cog):
                     self,
                     str(event_id),
                     str(team_id),
+                    team_items,
                     available_items,
                     team_coins,
                     str(interaction.user.id), 
@@ -858,10 +900,11 @@ class RollCrossroadView(RollBaseView):
             # We don't need to edit the message here as process_roll_progression will update it
             
         return callback
-
+    
 class RollShopView(RollBaseView):
-    def __init__(self, cog, event_id: str, team_id: str, available_items: list, team_coins: int, initiator_id: str, roll_message: discord.Message):
+    def __init__(self, cog, event_id: str, team_id: str, team_items: list, available_items: list, team_coins: int, initiator_id: str, roll_message: discord.Message):
         super().__init__(cog, event_id, team_id, initiator_id, roll_message)
+        self.team_items = team_items
         self.available_items = available_items
         self.team_coins = team_coins
         
@@ -1152,22 +1195,22 @@ class RollDockInitialView(RollBaseView):
             color=discord.Color.blue()
         )
         
-        # Add detailed info for each destination
-        for dest in self.destinations:
-            name = dest.get("name", "Unknown Location")
-            description = dest.get("description", "No description available.")
-            dest_id = dest.get("id", "")
-            charter_price = dest.get("cost", 0)
+        # # Add detailed info for each destination
+        # for dest in self.destinations:
+        #     name = dest.get("name", "Unknown Location")
+        #     description = dest.get("description", "No description available.")
+        #     dest_id = dest.get("id", "")
+        #     charter_price = dest.get("cost", 0)
             
-            # Check if the team can afford this destination
-            affordable = self.team_coins >= charter_price
-            status = "✅ Available" if affordable else "❌ Not enough coins"
+        #     # Check if the team can afford this destination
+        #     affordable = self.team_coins >= charter_price
+        #     status = "✅ Available" if affordable else "❌ Not enough coins"
             
-            embed.add_field(
-                name=f"{name}",
-                value=f"{description}\n**Status:** {status}\n**Cost:** {charter_price} coins",
-                inline=False
-            )
+        #     embed.add_field(
+        #         name=f"{name}",
+        #         value=f"{description}\n**Status:** {status}\n**Cost:** {charter_price} coins",
+        #         inline=False
+        #     )
         
         # Create a selector view with all destinations
         destination_view = RollDockSelectorView(
@@ -1246,7 +1289,7 @@ class RollDockSelectorView(RollBaseView):
             options.append(
                 discord.SelectOption(
                     label=dest_name,
-                    description=short_desc,
+                    description=f"{charter_price} coins",
                     value=select_value,
                     default=False,
                     emoji="✅" if affordable else "❌"
@@ -1438,21 +1481,30 @@ class RollDockSelectorView(RollBaseView):
         #await interaction.followup.send("Returning to ship charter options.", ephemeral=True)
 
 class RollShopInitialView(RollBaseView):
-    def __init__(self, cog, event_id: str, team_id: str, available_items: list, team_coins: int, initiator_id: str, roll_message: discord.Message, active_roll_context: dict = None):
+    def __init__(self, cog, event_id: str, team_id: str, team_items: list, available_items: list, team_coins: int, initiator_id: str, roll_message: discord.Message, active_roll_context: dict = None):
         super().__init__(cog, event_id, team_id, initiator_id, roll_message)
+        self.team_items = team_items
         self.available_items = available_items
         self.team_coins = team_coins
         self.active_roll_context = active_roll_context or {}
         
         logger.debug(f"Creating ShopInitialView with {len(available_items)} items and {team_coins} coins")
         
-        # Add "View Shop" button
-        view_shop_button = discord.ui.Button(
-            label=f"View Shop ({len(available_items)} items)",
-            style=discord.ButtonStyle.primary,
-            custom_id="view_shop",
-            disabled=len(available_items) == 0
-        )
+        if len(team_items) >= 3:
+            view_shop_button = discord.ui.Button(
+                label="Cannot View Shop (Full Inventory)",
+                style=discord.ButtonStyle.red,
+                custom_id="view_shop",
+                disabled=True
+            )
+        else:
+            # Add "View Shop" button
+            view_shop_button = discord.ui.Button(
+                label=f"View Shop ({len(available_items)} items)",
+                style=discord.ButtonStyle.primary,
+                custom_id="view_shop",
+                disabled=len(available_items) == 0
+            )
         view_shop_button.callback = self.show_shop
         self.add_item(view_shop_button)
         
@@ -1496,11 +1548,12 @@ class RollShopInitialView(RollBaseView):
                 value=f"{description}\n**Price:** {price} coins\n**Status:** {status}",
                 inline=False
             )
-          # Create a selector view with all items
         shop_view = RollShopView(
+          # Create a selector view with all items
             self.cog,
             self.event_id,
             self.team_id,
+            self.team_items,
             self.available_items,
             self.team_coins,
             self.initiator_id,
@@ -1658,8 +1711,8 @@ class RollShopItemView(RollBaseView):
             color=discord.Color.purple()
         )
         
-        # Create a shop view with all items
         shop_view = RollShopView(
+        # Create a shop view with all items
             self.cog,
             self.event_id,
             self.team_id,
@@ -1828,10 +1881,18 @@ class ItemBaseView(discord.ui.View):
         self.stop()
 
 class ItemDetailView(ItemBaseView):
-    def __init__(self, cog, interaction: discord.Interaction, event_id: str, team_id: str, item_data: dict, all_items: list, original_message: discord.Message):
+    def __init__(self, cog, interaction: discord.Interaction, event_id: str, team_id: str, item_data: dict, all_items: list, original_message: discord.Message, item_index: int = None):
         super().__init__(cog, interaction, event_id, team_id, original_message)
         self.item_data = item_data
         self.all_items = all_items
+        # Find the item index if not provided
+        self.item_index = item_index
+        if self.item_index is None and self.all_items:
+            # Find the index of this item in the all_items list
+            for i, item in enumerate(self.all_items):
+                if item.get("id") == self.item_data.get("id"):
+                    self.item_index = i
+                    break
 
         item_name = self.item_data.get("name", "Unknown Item")
         item_id = self.item_data.get("id", "unknown") # Ensure custom_id is valid
@@ -1858,10 +1919,20 @@ class ItemDetailView(ItemBaseView):
             logger.error(f"User {interaction.user.id} tried to use item without ID: {self.item_data}")
             return
 
+        # Construct payload with both itemId and item_index
+        payload = {"itemId": item_id}
+        if self.item_index is not None:
+            payload["item_index"] = self.item_index
+            logger.debug(f"Using item at index {self.item_index}: {item_name} ({item_id})")
+        else:
+            logger.warning(f"No item index found for item {item_name} ({item_id}), backend may reject this request")
+
+        print(json.dumps(payload, indent=2))  # Debugging line to check payload
+
         success, response_data = await self.cog.call_backend_api(
             f"/events/{self.event_id}/teams/{self.team_id}/items/use",
             method="POST",
-            payload={"itemId": item_id}
+            payload=payload
         )
 
         result_embed = discord.Embed(title=f"Using {item_name}")
@@ -1871,25 +1942,7 @@ class ItemDetailView(ItemBaseView):
             result_embed.color = discord.Color.green()
             logger.info(f"User {interaction.user.id} used item {item_id} for team {self.team_id}. Response: {message}")
 
-            refreshed_items, error_msg = await self.cog._fetch_inventory_items(self.event_id, self.team_id)
-            if error_msg:
-                result_embed.description += f"\n\n⚠️ Failed to refresh inventory: {error_msg}"
-                await self.original_message.edit(embed=result_embed, view=None) # Show use result, then error
-                return
-
-            if not refreshed_items:
-                result_embed.description += "\n\nYour inventory is now empty."
-                await self.original_message.edit(embed=result_embed, view=None)
-            else:
-                inventory_embed, inventory_view = self.cog._build_inventory_display(
-                    self.original_interaction, self.event_id, self.team_id, refreshed_items, self.original_message
-                )
-                # Prepend use message to the new inventory display
-                if inventory_embed.description:
-                    inventory_embed.description = f"✅ {message}\n\n{inventory_embed.description}"
-                else:
-                    inventory_embed.description = f"✅ {message}"
-                await self.original_message.edit(embed=inventory_embed, view=inventory_view)
+            await self.original_message.edit(embed=result_embed, view=None)
         else:
             error_message = response_data if isinstance(response_data, str) else response_data.get("detail", "Failed to use item.")
             result_embed.description = f"❌ {error_message}"
@@ -1927,6 +1980,31 @@ class InventoryView(ItemBaseView):
     def create_show_item_detail_callback(self, item_data: dict):
         async def callback(interaction: discord.Interaction):
             await interaction.response.defer()
+            
+            # Check if we have the original message reference
+            if not self.original_message:
+                # If not, try to get it from the interaction
+                try:
+                    self.original_message = interaction.message
+                except AttributeError:
+                    # If we still don't have a message, send a new one
+                    logger.warning(f"No original message reference found in inventory view for team {self.team_id}")
+                    await interaction.followup.send("Error displaying item details. Please try the `/items` command again.", ephemeral=True)
+                    return
+                      # Find the index of the item in the items list
+            item_index = None
+            for i, item in enumerate(self.items):
+                if item.get("id") == item_data.get("id"):
+                    item_index = i
+                    break
+
+            detailed_embed = discord.Embed(
+                title=f"Item Details: {item_data.get('name', 'Unknown Item')}",
+                description=item_data.get("description", "No description available."),
+                color=discord.Color.blue()
+            )
+            
+            # Create the detailed view for this item with the item index
             detailed_view = ItemDetailView(
                 self.cog,
                 interaction,
@@ -1934,9 +2012,17 @@ class InventoryView(ItemBaseView):
                 self.team_id,
                 item_data,
                 self.items,
-                self.original_message
+                self.original_message,
+                item_index
             )
-            await self.original_message.edit(view=detailed_view)
+            
+            # Edit the original message with the new view
+            try:
+                await self.original_message.edit(embed=detailed_embed, view=detailed_view)
+            except Exception as e:
+                logger.error(f"Error editing message in item detail view: {str(e)}")
+                await interaction.followup.send(f"Error displaying item details: {str(e)}", ephemeral=True)
+                
         return callback
 
     async def cancel_button_callback(self, interaction: discord.Interaction):

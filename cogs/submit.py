@@ -17,6 +17,8 @@ class DropSubmissionModal(ui.Modal):
         self.message = message
         self.add_item(self.questionItemName)
         self.add_item(self.questionItemSource)
+        self.add_item(self.questionItemQuantity)
+        self.questionItemQuantity.value = "1"
 
     async def callback(self, interaction) -> None:
         await interaction.response.defer(ephemeral = True)
@@ -24,10 +26,11 @@ class DropSubmissionModal(ui.Modal):
         payload = {
             "submission_type": "drop",
             "timestamp": self.message.created_at.isoformat(),
-            "user": self.message.author.nick if self.message.author.nick is not None else self.message.author.name,
+            "user": self.message.author.name,
             "discord_id": str(self.message.author.id),
             "item_name": self.questionItemName.value,
             "source": self.questionItemSource.value,
+            "quantity": self.questionItemQuantity.value,
             "attachment_url": self.message.attachments[0].url # Should be guaranteed to have exactly one attachment
         }
 
@@ -59,6 +62,7 @@ class DropSubmissionModal(ui.Modal):
 
     questionItemName = discord.ui.InputText(label = "What is the name of the drop? (EXACT NAME)", style = discord.InputTextStyle.short, placeholder = "Scythe of vitur (uncharged)", required = True)
     questionItemSource = discord.ui.InputText(label = "Where did you get the drop?", style = discord.InputTextStyle.short, placeholder = "Theatre of Blood", required = True)
+    questionItemQuantity = discord.ui.InputText(label = "How many of this item are you submitting?", style = discord.InputTextStyle.short, placeholder = "1", required = False)
 
 class Submit(commands.Cog):
     def __init__(self, bot):
@@ -66,7 +70,7 @@ class Submit(commands.Cog):
 
     @discord.message_command(name = "Submit Drop", guild_ids = [int(os.getenv("GUILD_ID"))])
     async def submit(self, interaction: discord.Interaction, message: discord.Message):
-        print(f"{interaction.author.nick if interaction.author.nick is not None else interaction.user.name}: /submit {message.author.nick}")
+        print(f"{interaction.author.display_name}: /submit {message.author.display_name}")
         # Check that the message contains exactly one attachment
         if len(message.attachments) != 1:
             await interaction.response.send_message("Please only submit on a message with exactly one file.", ephemeral = True)
