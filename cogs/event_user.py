@@ -776,6 +776,7 @@ class EventUser(commands.Cog):
                 embed.description = roll_data.data.get("message", "You've encountered a star! Choose wisely.")
                 star_price = roll_data.data.get("price", 0)
                 current_tile_info = roll_data.data.get("current_tile", {})
+                coins = roll_data.data.get("coins", 0)
                 embed.add_field(name=f"Currently at: {current_tile_info.get('name', 'Star')}", value="Select your star option from the choices below.", inline=False)
 
                 view = RollStarView(
@@ -783,6 +784,7 @@ class EventUser(commands.Cog):
                     str(event_id),
                     str(team_id),
                     star_price,
+                    coins,
                     str(interaction.user.id),
                     roll_message_ref
                 )
@@ -1073,7 +1075,7 @@ class RollShopView(RollBaseView):
         #await interaction.followup.send("Continuing journey without buying anything! Check the updated message.", ephemeral=True)
 
 class RollStarView(RollBaseView):
-    def __init__(self, cog, event_id: str, team_id: str, cost: int, initiator_id: str, roll_message: discord.Message):
+    def __init__(self, cog, event_id: str, team_id: str, cost: int, available_coins: int, initiator_id: str, roll_message: discord.Message):
         super().__init__(cog, event_id, team_id, initiator_id, roll_message)
         self.cost = cost
         
@@ -1081,7 +1083,8 @@ class RollStarView(RollBaseView):
         self.add_item(discord.ui.Button(
             label=f"Buy Star ({cost} coins)",
             style=discord.ButtonStyle.primary,
-            custom_id="star_buy"
+            custom_id="star_buy",
+            diabled=(available_coins < cost)
         ))
         
         self.add_item(discord.ui.Button(
