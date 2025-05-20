@@ -553,7 +553,8 @@ class EventUser(commands.Cog):
         # Process the roll progression
         try:
             # Send the initial message and store it for future updates
-            roll_message = await interaction.followup.send("🎲 Processing your roll...", wait=True)
+            roll_total = response_data.get("roll_total_for_turn", -1)
+            roll_message = await interaction.followup.send(f"You rolled a {roll_total}", wait=True)
             self.roll_messages[team_id] = roll_message
             logger.debug(f"Roll message created and stored for team {team_id}: {roll_message.id}")
             
@@ -996,6 +997,7 @@ class RollShopView(RollBaseView):
                 self.team_id,
                 item,
                 self.team_coins,
+                self.team_items,
                 self.available_items,
                 self.initiator_id,
                 self.roll_message
@@ -1038,6 +1040,7 @@ class RollShopView(RollBaseView):
             self.cog,
             self.event_id,
             self.team_id,
+            self.team_items,
             self.available_items,
             self.team_coins,
             self.initiator_id,
@@ -1046,9 +1049,6 @@ class RollShopView(RollBaseView):
         
         # Update the message
         await self.roll_message.edit(embed=embed, view=initial_view)
-        
-        # Let the user know they've returned to the initial shop menu
-        await interaction.followup.send("Returning to shop menu.", ephemeral=True)
     
     async def continue_journey(self, interaction: discord.Interaction):
         """Continue the journey without buying anything"""
@@ -1594,11 +1594,12 @@ class RollShopInitialView(RollBaseView):
         #await interaction.followup.send("Continuing journey without buying anything! Check the updated message.", ephemeral=True)
 
 class RollShopItemView(RollBaseView):
-    def __init__(self, cog, event_id: str, team_id: str, item: dict, team_coins: int, all_items: list, initiator_id: str, roll_message: discord.Message):
+    def __init__(self, cog, event_id: str, team_id: str, item: dict, team_coins: int, team_items: list, all_items: list, initiator_id: str, roll_message: discord.Message):
         super().__init__(cog, event_id, team_id, initiator_id, roll_message)
         self.item = item
         self.team_coins = team_coins
         self.all_items = all_items
+        self.team_items = team_items
         
         item_name = item.get("name", "Unknown Item")
         item_price = item.get("price", 0)
@@ -1719,6 +1720,7 @@ class RollShopItemView(RollBaseView):
             self.cog,
             self.event_id,
             self.team_id,
+            self.team_items,
             self.all_items,
             self.team_coins,
             self.initiator_id,
@@ -1836,6 +1838,77 @@ class FirstRollIslandSelectView(RollBaseView): # Inherit from RollBaseView
             logger.error(f"Exception during island selection callback for team {self.team_id}: {e}", exc_info=True)
             await interaction.followup.send(f"An unexpected error occurred: {str(e)[:1000]}", ephemeral=True)
 
+class ItemResponseSelectorView(discord.ui.View):
+    def __init__(self, cog, event_id, team_id, options, original_message):
+        super().__init__(timeout=180)
+        self.cog = cog
+        self.options = options
+        self.event_id = event_id
+        self.team_id = team_id
+        self.original_message = original_message
+
+        select_options = []
+        logging.info(f"Creating ItemResponseSelectorView with {len(options)} options.")
+        for option in options:
+            option_name = option.get("name", "Unknown Option")
+            option_description = option.get("description", "No description available.")
+            option_value = option.get("value", 0)
+
+            select_option = discord.SelectOption(
+                label=option_name,
+                description=option_description,
+                value=option_value
+            )
+
+            select_options.append(select_option)
+
+        select = discord.ui.Select(
+            placeholder=f"Select an option...",
+            options=select_options,
+            custom_id=f"item_response_select:{option_value}"
+        )
+
+        select.callback = self.select_callback
+        self.add_item(select)
+        logger.debug(f"ItemResponseSelectorView populated with {len(select_options)} options.")
+
+    # When an option is selected, send a request to /events/<event_id>/teams/<team_id>/items/selection
+    async def select_callback(self, interaction: discord.Interaction):
+        selected_value = interaction.data["values"][0]
+        selected_option = next((opt for opt in self.options if opt.get("value") == selected_value), None)
+
+        if not selected_option:
+            logger.error(f"Selected option not found in options list: {selected_value}")
+            return
+
+        logger.info(f"User {interaction.user.id} selected option {selected_value} for item response.")
+        # Defer the interaction to show a loading state
+        await interaction.response.defer(ephemeral=True)
+
+        # Call the API with the selected value
+        success, response_data = await self.cog.call_backend_api(
+            f"/events/{self.event_id}/teams/{self.team_id}/items/selection",
+            method="POST",
+            payload={"selection": selected_value}
+        )
+
+        if success:
+            logger.info(f"Successfully processed item response selection: {response_data}")
+            # Handle the response data as needed
+            # For example, update the message or send a follow-up message
+            item_name = response_data.get("item_name", "Item")
+            response_message = response_data.get("message", "used the item!")
+            success_embed = discord.Embed(
+                title=f"{item_name} Used!",
+                description=f"You {response_message}",
+                color=discord.Color.green()
+            )
+
+            await self.original_message.edit(embed=success_embed, view=None)
+        else:
+            logger.error(f"Failed to process item response selection: {response_data}")
+            await interaction.followup.send(f"Error processing selection: {response_data}", ephemeral=True)
+
 class ItemBaseView(discord.ui.View):
     def __init__(self, cog, interaction: discord.Interaction, event_id: str, team_id: str, original_message: discord.Message = None):
         super().__init__(timeout=180)  # 3 minutes timeout
@@ -1938,17 +2011,27 @@ class ItemDetailView(ItemBaseView):
             payload=payload
         )
 
-        result_embed = discord.Embed(title=f"Using {item_name}")
-        if success:
-            message = response_data.get("message", f"Successfully used {item_name}.")
-            result_embed.description = f"✅ {message}"
-            result_embed.color = discord.Color.green()
-            logger.info(f"User {interaction.user.id} used item {item_id} for team {self.team_id}. Response: {message}")
+        print(response_data)
 
-            await self.original_message.edit(embed=result_embed, view=None)
+        result_embed = discord.Embed(title=f"Using {item_name}")
+        result_view = None
+        if success:
+            if response_data.get("requires_selection", False):
+                # If the response indicates a selection is required, show the selector
+                options = response_data.get("options", [])
+                result_view = ItemResponseSelectorView(self.cog, self.event_id, self.team_id, options, original_message=self.original_message)
+                result_embed.description = "You " + response_data.get("message", "Please select an option.")
+            else:
+                message = response_data.get("message", f"Successfully used {item_name}.")
+                result_embed.description = f"✅ {message}"
+                result_embed.color = discord.Color.green()
+                logger.info(f"User {interaction.user.id} used item {item_id} for team {self.team_id}. Response: {message}")
+
+            await self.original_message.edit(embed=result_embed, view=result_view)
         else:
             error_message = response_data if isinstance(response_data, str) else response_data.get("detail", "Failed to use item.")
-            result_embed.description = f"❌ {error_message}"
+            msg = error_message.get("message", "Unknown error occurred.")
+            result_embed.description = f"❌ {msg}"
             result_embed.color = discord.Color.red()
             logger.error(f"User {interaction.user.id} failed to use item {item_id} for team {self.team_id}. Error: {error_message}")
             await self.original_message.edit(embed=result_embed, view=self) # Re-show current view with error
