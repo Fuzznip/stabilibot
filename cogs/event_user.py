@@ -2052,10 +2052,10 @@ class InventoryView(ItemBaseView):
         super().__init__(cog, interaction, event_id, team_id)
         self.items = items
 
-        for item_data in self.items:
+        for i, item_data in enumerate(self.items):
             item_name = item_data.get("name", "Unknown Item")
             item_id = item_data.get("id", item_name.replace(" ", "_").lower()) # Fallback custom_id
-            button = discord.ui.Button(label=item_name, style=discord.ButtonStyle.secondary, custom_id=f"inventory_view_item_{item_id}")
+            button = discord.ui.Button(label=item_name, style=discord.ButtonStyle.secondary, custom_id=f"inventory_view_item_{item_id}_{i}")
             button.callback = self.create_show_item_detail_callback(item_data)
             self.add_item(button)
 
