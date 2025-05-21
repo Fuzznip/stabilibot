@@ -1840,7 +1840,7 @@ class FirstRollIslandSelectView(RollBaseView): # Inherit from RollBaseView
 
 class ItemResponseSelectorView(discord.ui.View):
     def __init__(self, cog, event_id, team_id, options, original_message):
-        super().__init__(timeout=180)
+        super().__init__()
         self.cog = cog
         self.options = options
         self.event_id = event_id
@@ -1911,7 +1911,7 @@ class ItemResponseSelectorView(discord.ui.View):
 
 class ItemBaseView(discord.ui.View):
     def __init__(self, cog, interaction: discord.Interaction, event_id: str, team_id: str, original_message: discord.Message = None):
-        super().__init__(timeout=180)  # 3 minutes timeout
+        super().__init__()  # 3 minutes timeout
         self.cog = cog
         self.original_interaction = interaction
         self.event_id = event_id
