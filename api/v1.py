@@ -19,8 +19,8 @@ class DiscordRoleAction(BaseModel):
 class CreateChannelRequest(BaseModel):
     category_name: str
     channel_name: str
-    view_roles: List[int]  # Changed from list[str] to List[int]
-    access_roles: List[int]  # Changed from list[str] to List[int]
+    view_roles: List[str]
+    access_roles: List[str]
     view_users: List[int]
     access_users: List[int]
     token: str
@@ -145,21 +145,21 @@ class V1(commands.Cog):
             }
             
             # Add view roles
-            for role_id in channel_request.view_roles:
-                role = discord.utils.get(guild.roles, id=role_id)
+            for role_name in channel_request.view_roles:
+                role = discord.utils.get(guild.roles, name=role_name)
                 if not role:
-                    logger.error(f"View role '{role_id}' not found")
+                    logger.error(f"View role '{role_name}' not found")
                     response.status_code = 404
-                    return {"error": f"View role '{role_id}' not found"}
+                    return {"error": f"View role '{role_name}' not found"}
                 overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=False)
             
             # Add access roles
-            for role_id in channel_request.access_roles:
-                role = discord.utils.get(guild.roles, id=role_id)
+            for role_name in channel_request.access_roles:
+                role = discord.utils.get(guild.roles, name=role_name)
                 if not role:
-                    logger.error(f"Access role '{role_id}' not found")
+                    logger.error(f"Access role '{role_name}' not found")
                     response.status_code = 404
-                    return {"error": f"Access role '{role_id}' not found"}
+                    return {"error": f"Access role '{role_name}' not found"}
                 overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
 
             for user_id in channel_request.view_users:
