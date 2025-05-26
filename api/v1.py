@@ -21,6 +21,8 @@ class CreateChannelRequest(BaseModel):
     channel_name: str
     view_roles: List[int]  # Changed from list[str] to List[int]
     access_roles: List[int]  # Changed from list[str] to List[int]
+    view_users: List[int]
+    access_users: List[int]
     token: str
 
 class CreateRoleRequest(BaseModel):
@@ -159,6 +161,22 @@ class V1(commands.Cog):
                     response.status_code = 404
                     return {"error": f"Access role '{role_id}' not found"}
                 overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+
+            for user_id in channel_request.view_users:
+                user = guild.get_member(user_id)
+                if not user:
+                    logger.error(f"View user '{user_id}' not found")
+                    response.status_code = 404
+                    return {"error": f"View user '{user_id}' not found"}
+                overwrites[user] = discord.PermissionOverwrite(read_messages=True, send_messages=False)
+
+            for user_id in channel_request.access_users:
+                user = guild.get_member(user_id)
+                if not user:
+                    logger.error(f"Access user '{user_id}' not found")
+                    response.status_code = 404
+                    return {"error": f"Access user '{user_id}' not found"}
+                overwrites[user] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
             
             try:
                 # Create the text channel
@@ -222,6 +240,22 @@ class V1(commands.Cog):
                     response.status_code = 404
                     return {"error": f"Access role '{role_id}' not found"}
                 overwrites[role] = discord.PermissionOverwrite(view_channel=True, connect=True, speak=True)
+
+            for user_id in channel_request.view_users:
+                user = guild.get_member(user_id)
+                if not user:
+                    logger.error(f"View user '{user_id}' not found")
+                    response.status_code = 404
+                    return {"error": f"View user '{user_id}' not found"}
+                overwrites[user] = discord.PermissionOverwrite(view_channel=True, connect=False)
+
+            for user_id in channel_request.access_users:
+                user = guild.get_member(user_id)
+                if not user:
+                    logger.error(f"Access user '{user_id}' not found")
+                    response.status_code = 404
+                    return {"error": f"Access user '{user_id}' not found"}
+                overwrites[user] = discord.PermissionOverwrite(view_channel=True, connect=True, speak=True)
             
             try:
                 # Create the voice channel
