@@ -7,6 +7,84 @@ import json
 import aiohttp
 import logging
 
+class AddToTeamSelectView(discord.ui.View):
+    def __init__(self, target_member, teams, cog, event_id):
+        super().__init__(timeout=300)
+        self.target_member = target_member
+        self.cog = cog
+        self.event_id = event_id
+
+        self.team_select = discord.ui.Select(
+            placeholder="Select a team",
+            min_values=1,
+            max_values=1,
+            options=[
+                discord.SelectOption(
+                    label=f"{team.get('name', 'Unknown')}",
+                    description=f"ID: {team.get('id', 'Unknown')}",
+                    value=json.dumps({"id": team.get('id', 'Unknown'), "name": team.get('name', 'Unknown')})
+                ) for team in teams
+            ]
+        )
+
+        self.team_select.callback = self.team_selected
+        self.add_item(self.team_select)
+
+    async def team_selected(self, interaction):
+        if not await self.cog.check_mod_permissions(interaction):
+            return
+
+        selected = json.loads(self.team_select.values[0])
+        team_id = selected["id"]
+        team_name = selected["name"]
+
+        await interaction.response.defer(ephemeral=True)
+
+        # Call API to add player to team
+        payload = {
+            "discord_id": str(self.target_member.id),
+        }
+
+        success, response_data = await self.cog.call_backend_api(
+            f"/v2/teams/{team_id}/members",
+            payload,
+            interaction
+        )
+
+        if not success:
+            await interaction.followup.send(f"Failed to add player to team: {response_data}", ephemeral=True)
+            return
+
+        # Create or find the Discord role with the team name and assign it
+        guild = interaction.guild
+        role = discord.utils.get(guild.roles, name=team_name)
+
+        if not role:
+            try:
+                role = await guild.create_role(name=team_name, mentionable=True)
+            except discord.Forbidden:
+                await interaction.followup.send(
+                    f"Added {self.target_member.display_name} to team '{team_name}' via API, but I don't have permission to create the Discord role.",
+                    ephemeral=True
+                )
+                return
+
+        try:
+            await self.target_member.add_roles(role)
+        except discord.Forbidden:
+            await interaction.followup.send(
+                f"Added {self.target_member.display_name} to team '{team_name}' via API, but I don't have permission to assign the role.",
+                ephemeral=True
+            )
+            return
+
+        await interaction.message.edit(
+            content=f"Added {self.target_member.display_name} to team **{team_name}** and assigned the **{team_name}** role.",
+            view=None
+        )
+        await interaction.followup.send("Done!", ephemeral=True)
+
+
 class TeamSelectView(discord.ui.View):
     def __init__(self, user, teams, cog, event_id):
         super().__init__(timeout=300)  # 5 minute timeout
@@ -456,7 +534,7 @@ class EventMod(commands.Cog):
     async def get_active_event(self, interaction):
         # Fetch available events
         success, response_data = await self.call_backend_api(
-            "/events",
+            "/v2/events/active",
             None,
             interaction,
             method="GET"
@@ -465,15 +543,15 @@ class EventMod(commands.Cog):
         if not success:
             return None, f"Failed to retrieve events: {response_data}"
         
-        # Get available events with type="STABILITY_PARTY"
-        stability_party_events = [event for event in response_data if event.get('type') == "STABILITY_PARTY"]
+        # # Get available events with type="STABILITY_PARTY"
+        # stability_party_events = [event for event in response_data if event.get('type') == "STABILITY_PARTY"]
         
-        if not stability_party_events:
-            return None, "No active STABILITY_PARTY events found"
+        # if not stability_party_events:
+        #     return None, "No active STABILITY_PARTY events found"
         
-        # Return the first active event
-        event = stability_party_events[0]
-        return event, None
+        # # Return the first active event
+        # event = stability_party_events[0]
+        return response_data, None
     
     # Helper to check if user has event moderator permissions
     async def check_mod_permissions(self, interaction):
@@ -551,6 +629,37 @@ class EventMod(commands.Cog):
         except Exception as e:
             print(f"Unexpected error calling {url}: {str(e)}")
             return False, f"Unexpected error: {str(e)}"
+
+    # Add Player to Team Command
+    @discord.slash_command(name="add_to_team", description="Add a player to an event team", guild_ids=[int(os.getenv("GUILD_ID"))])
+    async def add_to_team(self, interaction, player: discord.Member):
+        print(f"{interaction.user.display_name}: /add_to_team {player.display_name}")
+
+        if not await self.check_mod_permissions(interaction):
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        # Get the first active STABILITY_PARTY event
+        event, error = await self.get_active_event(interaction)
+        if error:
+            await interaction.followup.send(error, ephemeral=True)
+            return
+
+        event_id = event.get('id')
+        event_name = event.get('name')
+
+        if not event.teams:
+            await interaction.followup.send("No teams found for this event.", ephemeral=True)
+            return
+
+        # Show team selection dropdown
+        view = AddToTeamSelectView(player, event.teams, self, event_id)
+        await interaction.followup.send(
+            f"Select a team to add **{player.display_name}** to for event '{event_name}':",
+            view=view,
+            ephemeral=True
+        )
 
     # Create Team Command
     @discord.slash_command(name="event_create_team", description="Create a new event team", guild_ids=[int(os.getenv("GUILD_ID"))])
