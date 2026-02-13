@@ -649,12 +649,13 @@ class EventMod(commands.Cog):
         event_id = event.get('id')
         event_name = event.get('name')
 
-        if not event.teams:
+        teams = event.get('teams', [])
+        if not teams:
             await interaction.followup.send("No teams found for this event.", ephemeral=True)
             return
 
         # Show team selection dropdown
-        view = AddToTeamSelectView(player, event.teams, self, event_id)
+        view = AddToTeamSelectView(player, teams, self, event_id)
         await interaction.followup.send(
             f"Select a team to add **{player.display_name}** to for event '{event_name}':",
             view=view,
