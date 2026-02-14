@@ -590,16 +590,24 @@ class EventMod(commands.Cog):
                 elif method == "POST":
                     async with session.post(url, json=payload) as response:
                         if response.status in [200, 201]:
-                            data = await response.json()
+                            try:
+                                data = await response.json()
+                            except aiohttp.ContentTypeError:
+                                data = await response.text()
+                                return True, json.loads(data)
                         else:
                             error_text = await response.text()
                             print(f"Error calling {url}: {response.status} - {error_text}")
                             return False, f"Error: {response.status} - {error_text}"
-                
+
                 elif method == "PUT":
                     async with session.put(url, json=payload) as response:
                         if response.status in [200, 201]:
-                            data = await response.json()
+                            try:
+                                data = await response.json()
+                            except aiohttp.ContentTypeError:
+                                data = await response.text()
+                                return True, json.loads(data)
                         else:
                             error_text = await response.text()
                             print(f"Error calling {url}: {response.status} - {error_text}")
