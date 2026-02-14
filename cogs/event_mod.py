@@ -13,6 +13,7 @@ class AddToTeamSelectView(discord.ui.View):
         self.target_member = target_member
         self.cog = cog
         self.event_id = event_id
+        self.teams = teams
 
         self.team_select = discord.ui.Select(
             placeholder="Select a team",
@@ -45,6 +46,8 @@ class AddToTeamSelectView(discord.ui.View):
             "discord_id": str(self.target_member.id),
         }
 
+        moved_from_team = None
+
         success, response_data = await self.cog.call_backend_api(
             f"/v2/teams/{team_id}/members",
             payload,
@@ -52,8 +55,42 @@ class AddToTeamSelectView(discord.ui.View):
         )
 
         if not success:
-            await interaction.followup.send(f"Failed to add player to team: {response_data}", ephemeral=True)
-            return
+            # If user is already on another team, remove them and re-add
+            if "already on a team" in str(response_data).lower():
+                # Find and remove from all other teams
+                for team in self.teams:
+                    other_team_id = team.get('id')
+                    if other_team_id == team_id:
+                        continue
+                    # Try to remove from this team (ignore failures - they may not be on it)
+                    rm_success, _ = await self.cog.call_backend_api(
+                        f"/v2/teams/{other_team_id}/members",
+                        payload,
+                        interaction,
+                        method="DELETE"
+                    )
+                    if rm_success:
+                        moved_from_team = team.get('name', 'Unknown')
+                    # Remove old team role if it exists
+                    old_role = discord.utils.get(interaction.guild.roles, name=team.get('name', ''))
+                    if old_role and old_role in self.target_member.roles:
+                        try:
+                            await self.target_member.remove_roles(old_role)
+                        except discord.Forbidden:
+                            pass
+
+                # Re-add to the selected team
+                success, response_data = await self.cog.call_backend_api(
+                    f"/v2/teams/{team_id}/members",
+                    payload,
+                    interaction
+                )
+                if not success:
+                    await interaction.followup.send(f"Failed to add player to team: {response_data}", ephemeral=True)
+                    return
+            else:
+                await interaction.followup.send(f"Failed to add player to team: {response_data}", ephemeral=True)
+                return
 
         # Create or find the Discord role with the team name and assign it
         guild = interaction.guild
@@ -78,10 +115,12 @@ class AddToTeamSelectView(discord.ui.View):
             )
             return
 
-        await interaction.followup.send(
-            f"{self.target_member.display_name} has been successfully added to Team {team_name}!",
-            ephemeral=True
-        )
+        if moved_from_team:
+            msg = f"Removed {self.target_member.display_name} from Team {moved_from_team} and added to Team {team_name}!"
+        else:
+            msg = f"{self.target_member.display_name} has been successfully added to Team {team_name}!"
+
+        await interaction.followup.send(msg, ephemeral=True)
 
 
 class TeamSelectView(discord.ui.View):
