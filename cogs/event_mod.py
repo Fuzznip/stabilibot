@@ -44,6 +44,7 @@ class AddToTeamSelectView(discord.ui.View):
         # Call API to add player to team
         payload = {
             "discord_id": str(self.target_member.id),
+            "username": self.target_member.display_name,
         }
 
         moved_from_team = None
