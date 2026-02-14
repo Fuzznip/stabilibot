@@ -47,8 +47,8 @@ class AddToTeamSelectView(discord.ui.View):
             "username": self.target_member.display_name,
         }
 
+        # Try to add to the selected team
         moved_from_team = None
-
         success, response_data = await self.cog.call_backend_api(
             f"/v2/teams/{team_id}/members",
             payload,
@@ -56,22 +56,35 @@ class AddToTeamSelectView(discord.ui.View):
         )
 
         if not success:
-            # If user is already on another team, remove them and re-add
-            if "already on a team" in str(response_data).lower():
-                # Find and remove from all other teams
-                for team in self.teams:
-                    other_team_id = team.get('id')
-                    if other_team_id == team_id:
-                        continue
-                    # Try to remove from this team (ignore failures - they may not be on it)
-                    rm_success, _ = await self.cog.call_backend_api(
-                        f"/v2/teams/{other_team_id}/members",
-                        payload,
-                        interaction,
-                        method="DELETE"
-                    )
-                    if rm_success:
-                        moved_from_team = team.get('name', 'Unknown')
+            # Player might be on another team — find and remove them, then retry
+            discord_id = str(self.target_member.id)
+            for team in self.teams:
+                other_team_id = team.get('id')
+                if other_team_id == team_id:
+                    continue
+                # Check if player is a member of this team
+                success_get, members_data = await self.cog.call_backend_api(
+                    f"/v2/teams/{other_team_id}/members",
+                    None,
+                    interaction,
+                    method="GET"
+                )
+                if not success_get:
+                    continue
+                members = members_data.get('data', [])
+                member_entry = next((m for m in members if m.get('user', {}).get('discord_id') == discord_id), None)
+                if not member_entry:
+                    continue
+                # Remove from this team using the internal user_id
+                user_id = member_entry.get('user', {}).get('id')
+                rm_success, _ = await self.cog.call_backend_api(
+                    f"/v2/teams/{other_team_id}/members/{user_id}",
+                    None,
+                    interaction,
+                    method="DELETE"
+                )
+                if rm_success:
+                    moved_from_team = team.get('name', 'Unknown')
                     # Remove old team role if it exists
                     old_role = discord.utils.get(interaction.guild.roles, name=team.get('name', ''))
                     if old_role and old_role in self.target_member.roles:
@@ -79,8 +92,10 @@ class AddToTeamSelectView(discord.ui.View):
                             await self.target_member.remove_roles(old_role)
                         except discord.Forbidden:
                             pass
+                    break
 
-                # Re-add to the selected team
+            if moved_from_team:
+                # Retry adding to the selected team
                 success, response_data = await self.cog.call_backend_api(
                     f"/v2/teams/{team_id}/members",
                     payload,
