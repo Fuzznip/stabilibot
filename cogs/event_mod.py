@@ -78,11 +78,10 @@ class AddToTeamSelectView(discord.ui.View):
             )
             return
 
-        await interaction.message.edit(
-            content=f"Added {self.target_member.display_name} to team **{team_name}** and assigned the **{team_name}** role.",
-            view=None
+        await interaction.followup.send(
+            f"{self.target_member.display_name} has been successfully added to Team {team_name}!",
+            ephemeral=True
         )
-        await interaction.followup.send("Done!", ephemeral=True)
 
 
 class TeamSelectView(discord.ui.View):
