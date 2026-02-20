@@ -9,23 +9,52 @@ import os
 import aiohttp
 import io
 
-class GuessModal(ui.Modal):
-    def __init__(self, bot: commands.Bot, interaction: discord.Interaction, message: discord.Message):
-        super().__init__(title = "Guess", timeout = None, custom_id = "guess_form")
+class GuessModal(ui.DesignerModal):
+    def __init__(self, bot: commands.Bot, interaction: discord.Interaction):
+        super().__init__(title = "Guess", custom_id = "guess_form")
         self.bot = bot
         self.interaction = interaction
-        self.message = message
-        self.add_item(self.questionItemName)
-        self.add_item(self.questionLocation)
+        
+        # Add Item Name field
+        item_name_label = ui.Label(label = "Item Name")
+        item_name_label.set_input_text(placeholder = "Enter the item name", required = True)
+        self.add_item(item_name_label)
+        
+        # Add Location field
+        location_label = ui.Label(label = "Location")
+        location_label.set_input_text(placeholder = "Enter the location", required = True)
+        self.add_item(location_label)
+        
+        # Add Screenshot field
+        screenshot_label = ui.Label(label = "Screenshot")
+        screenshot_label.set_file_upload(required = True, min_values = 1, max_values = 1)
+        self.add_item(screenshot_label)
 
     async def callback(self, interaction) -> None:
         await interaction.response.defer(ephemeral = True)
         
+        # Extract values from modal
+        item_name = None
+        location = None
+        screenshot = None
+        
+        for item in self.children:
+            if isinstance(item, ui.Label):
+                if item.label == "Item Name":
+                    item_name = item.item.value if hasattr(item.item, 'value') else None
+                elif item.label == "Location":
+                    location = item.item.value if hasattr(item.item, 'value') else None
+                elif item.label == "Screenshot":
+                    screenshot = item.item.values[0] if hasattr(item.item, 'values') and item.item.values else None
+        
+        # Get the current user from interaction
+        user = interaction.user
+        
         # Create json payload
         payload = {
-            "discord_id": str(self.message.author.id),
-            "item_name": self.questionItemName.value,
-            "location": self.questionLocation.value
+            "discord_id": str(user.id),
+            "item_name": item_name,
+            "location": location
         }
 
         # Send the json payload to the /guess endpoint
@@ -53,27 +82,26 @@ class GuessModal(ui.Modal):
                 print(f"Item match: {item_name_matches}, Location match: {location_matches}, Puzzle solved: {puzzle_solved}")
                 
                 # If a puzzle was solved, notify the designated user
-                if puzzle_solved:
+                if puzzle_solved and screenshot:
                     try:
                         # Get the user to notify
                         notify_user = await self.bot.fetch_user(88087113626587136)
                         
-                        # Download the attachment from the message
-                        attachment = self.message.attachments[0]
-                        file_data = await attachment.read()
-                        file = discord.File(fp = io.BytesIO(file_data), filename = attachment.filename)
+                        # Download the attachment from the screenshot
+                        file_data = await screenshot.read()
+                        file = discord.File(fp = io.BytesIO(file_data), filename = screenshot.filename)
                         
                         # Create notification message
                         notification_message = (
                             f"**Puzzle Solved!**\n"
-                            f"User: {self.message.author.display_name} ({self.message.author.id})\n"
-                            f"Item Name: {self.questionItemName.value}\n"
-                            f"Location: {self.questionLocation.value}"
+                            f"User: {user.display_name} ({user.id})\n"
+                            f"Item Name: {item_name}\n"
+                            f"Location: {location}"
                         )
                         
                         # Send DM with the file
                         await notify_user.send(content = notification_message, file = file)
-                        print(f"Notified user 88087113626587136 about puzzle solve by {self.message.author.display_name}")
+                        print(f"Notified user 88087113626587136 about puzzle solve by {user.display_name}")
                     except Exception as e:
                         print(f"Error notifying user about puzzle solve: {str(e)}")
                 
@@ -89,24 +117,18 @@ class GuessModal(ui.Modal):
             await interaction.followup.send(f"Unknown Error")
             return
 
-    questionItemName = discord.ui.InputText(label = "Item Name", style = discord.InputTextStyle.short, placeholder = "Enter the item name", required = True)
-    questionLocation = discord.ui.InputText(label = "Location", style = discord.InputTextStyle.short, placeholder = "Enter the location", required = True)
+
 
 class Guess(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @discord.message_command(name = "Submit Guess", guild_ids = [int(os.getenv("GUILD_ID"))])
-    async def guess(self, interaction: discord.Interaction, message: discord.Message):
-        print(f"{interaction.author.display_name}: Submit Guess on {message.author.display_name}'s message")
-        
-        # Check that the message contains exactly one attachment
-        if len(message.attachments) != 1:
-            await interaction.response.send_message("Please only submit on a message with exactly one file.", ephemeral = True)
-            return
+    @discord.slash_command(name = "guess", description = "Submit a guess for an item and location", guild_ids = [int(os.getenv("GUILD_ID"))])
+    async def guess(self, interaction: discord.Interaction):
+        print(f"{interaction.user.name}: /guess")
         
         # Send a modal to the user for input
-        await interaction.response.send_modal(GuessModal(self.bot, interaction, message))
+        await interaction.response.send_modal(GuessModal(self.bot, interaction))
 
 def setup(bot):
     bot.add_cog(Guess(bot))
