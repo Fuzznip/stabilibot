@@ -124,7 +124,7 @@ class Guess(commands.Cog):
         self.bot = bot
 
     @discord.slash_command(name = "guess", description = "Submit a guess for an item and location", guild_ids = [int(os.getenv("GUILD_ID"))])
-    async def guess(self, interaction: discord.Interaction):
+    async def guess(self, interaction):
         print(f"{interaction.user.name}: /guess")
         
         # Send a modal to the user for input
