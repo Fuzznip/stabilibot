@@ -26,6 +26,7 @@ from cogs.cron_update_nicknames import UpdateNicknames
 from cogs.event_mod import EventMod
 from cogs.event_user import EventUser
 from cogs.register_alt import RegisterAlt
+from cogs.guess import Guess
 
 class Stabilibot(commands.Bot):
   def __init__(self):
@@ -57,5 +58,6 @@ bot.add_cog(UpdateNicknames(bot))
 bot.add_cog(EventMod(bot))
 bot.add_cog(EventUser(bot))
 bot.add_cog(RegisterAlt(bot))
+bot.add_cog(Guess(bot))
 
 bot.run(os.getenv("TOKEN"))
