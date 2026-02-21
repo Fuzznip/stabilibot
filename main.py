@@ -23,6 +23,7 @@ from cogs.gear import Gear
 from cogs.submit import Submit, SubmitKC
 from cogs.rename import Rename
 from cogs.cron_update_nicknames import UpdateNicknames
+from cogs.cron_post_riddles import PostRiddles
 from cogs.event_mod import EventMod
 from cogs.event_user import EventUser
 from cogs.register_alt import RegisterAlt
@@ -55,6 +56,7 @@ bot.add_cog(Submit(bot))
 bot.add_cog(SubmitKC(bot))
 bot.add_cog(Rename(bot))
 bot.add_cog(UpdateNicknames(bot))
+bot.add_cog(PostRiddles(bot))
 bot.add_cog(EventMod(bot))
 bot.add_cog(EventUser(bot))
 bot.add_cog(RegisterAlt(bot))
