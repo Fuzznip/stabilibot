@@ -68,46 +68,46 @@ class GuessModal(ui.DesignerModal):
                         return
                     else:
                         print(f"Guess submission successful: {response.status}")
-                
-                # Get response data
-                data = await response.json()
-                
-                # Extract the response fields
-                item_name_matches = data.get("item_name_matches", False)
-                location_matches = data.get("location_matches", False)
-                puzzle_solved = data.get("puzzle_solved", False)
-                response_message = data.get("message", "Guess submitted successfully")
-                
-                # Log the results
-                print(f"Item match: {item_name_matches}, Location match: {location_matches}, Puzzle solved: {puzzle_solved}")
-                
-                # If a puzzle was solved, notify the designated user
-                if puzzle_solved and screenshot:
-                    try:
-                        # Get the user to notify
-                        notify_user = await self.bot.fetch_user(88087113626587136)
-                        
-                        # Download the attachment from the screenshot
-                        file_data = await screenshot.read()
-                        file = discord.File(fp = io.BytesIO(file_data), filename = screenshot.filename)
-                        
-                        # Create notification message
-                        notification_message = (
-                            f"**Puzzle Solved!**\n"
-                            f"User: {user.display_name} ({user.id})\n"
-                            f"Item Name: {item_name}\n"
-                            f"Location: {location}"
-                        )
-                        
-                        # Send DM with the file
-                        await notify_user.send(content = notification_message, file = file)
-                        print(f"Notified user 88087113626587136 about puzzle solve by {user.display_name}")
-                    except Exception as e:
-                        print(f"Error notifying user about puzzle solve: {str(e)}")
-                
-                # Send the response message to the user
-                await interaction.followup.send(response_message)
-                return
+                    
+                    # Get response data
+                    data = await response.json()
+                    
+                    # Extract the response fields
+                    item_name_matches = data.get("item_name_matches", False)
+                    location_matches = data.get("location_matches", False)
+                    puzzle_solved = data.get("puzzle_solved", False)
+                    response_message = data.get("message", "Guess submitted successfully")
+                    
+                    # Log the results
+                    print(f"Item match: {item_name_matches}, Location match: {location_matches}, Puzzle solved: {puzzle_solved}")
+                    
+                    # If a puzzle was solved, notify the designated user
+                    if puzzle_solved and screenshot:
+                        try:
+                            # Get the user to notify
+                            notify_user = await self.bot.fetch_user(88087113626587136)
+                            
+                            # Download the attachment from the screenshot
+                            file_data = await screenshot.read()
+                            file = discord.File(fp = io.BytesIO(file_data), filename = screenshot.filename)
+                            
+                            # Create notification message
+                            notification_message = (
+                                f"**Puzzle Solved!**\n"
+                                f"User: {user.display_name} ({user.id})\n"
+                                f"Item Name: {item_name}\n"
+                                f"Location: {location}"
+                            )
+                            
+                            # Send DM with the file
+                            await notify_user.send(content = notification_message, file = file)
+                            print(f"Notified user 88087113626587136 about puzzle solve by {user.display_name}")
+                        except Exception as e:
+                            print(f"Error notifying user about puzzle solve: {str(e)}")
+                    
+                    # Send the response message to the user
+                    await interaction.followup.send(response_message)
+                    return
         except aiohttp.ClientConnectorError as e:
             print(str(e))
             await interaction.followup.send(f"Error connecting to server: {str(e)}")
@@ -116,8 +116,6 @@ class GuessModal(ui.DesignerModal):
             print(f"Unknown error: {str(e)}")
             await interaction.followup.send(f"Unknown Error")
             return
-
-
 
 class Guess(commands.Cog):
     def __init__(self, bot):
