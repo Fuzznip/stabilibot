@@ -42,6 +42,11 @@ class SetNicknameRequest(BaseModel):
     nickname: str
     token: str
 
+class SendDMRequest(BaseModel):
+    user_id: int
+    message: str
+    token: str
+
 class V1(commands.Cog):
     def __init__(self, bot: discord.Bot):
         self.bot = bot
@@ -418,4 +423,33 @@ class V1(commands.Cog):
                 response.status_code = 500
                 return {"error": f"Error setting nickname: {str(e)}"}
             return {"message": f"Nickname for user '{member.name}' set to '{nickname_request.nickname}'"}
+
+        @self.router.post("/dm")
+        async def send_dm(request: Request, response: Response, dm_request: SendDMRequest):
+            logger.info(f"Received request to send DM to user ID {dm_request.user_id}")
+
+            if dm_request.token != os.getenv("API_TOKEN"):
+                logger.warning("Invalid token provided to send_dm endpoint")
+                response.status_code = 401
+                return {"error": "Invalid token"}
+
+            user = self.bot.get_user(dm_request.user_id)
+            if not user:
+                try:
+                    user = await self.bot.fetch_user(dm_request.user_id)
+                except discord.NotFound:
+                    response.status_code = 404
+                    return {"error": "User not found"}
+
+            try:
+                await user.send(dm_request.message)
+                logger.info(f"Sent DM to user '{user.name}'")
+                return {"message": f"DM sent to {user.name}"}
+            except discord.Forbidden:
+                response.status_code = 403
+                return {"error": "Cannot send DM to this user (DMs may be disabled)"}
+            except Exception as e:
+                logger.error(f"Error sending DM: {str(e)}")
+                response.status_code = 500
+                return {"error": f"Error sending DM: {str(e)}"}
 
