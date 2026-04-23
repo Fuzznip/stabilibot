@@ -24,7 +24,7 @@ class Rename(commands.Cog):
         await interaction.response.defer(ephemeral=True)
 
         # Make sure the new name only contains alphanumeric characters, spaces, and underscores
-        if not new_name.replace("_", " ").isalnum():
+        if not new_name.replace("_", "").replace(" ", "").isalnum():
             await interaction.user.send("Invalid username. Only alphanumeric characters, spaces, and underscores are allowed.")
             return
 
