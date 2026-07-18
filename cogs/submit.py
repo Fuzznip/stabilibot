@@ -174,6 +174,7 @@ class DropSearchModal(ui.Modal):
                 f"No triggers matched \"{query}\". Try a different search term.",
                 view=SearchAgainView(self.bot, self.message, quantity),
                 ephemeral=True,
+                wait=True,  # required so the view binds to the message and its buttons fire
             )
             return
 
@@ -190,6 +191,7 @@ class DropSearchModal(ui.Modal):
             content,
             view=TriggerSelectView(self.bot, self.message, shown, quantity),
             ephemeral=True,
+            wait=True,  # required so the view binds to the message and the select fires
         )
 
 
