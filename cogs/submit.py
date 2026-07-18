@@ -27,7 +27,9 @@ async def fetch_drop_triggers():
                 if response.status != 200:
                     print(f"Whitelist fetch failed: {response.status}")
                     return None
-                data = await response.json()
+                # Backend returns json.dumps(...) from Flask, served as text/html,
+                # so bypass aiohttp's mimetype check (content_type=None).
+                data = await response.json(content_type=None)
                 return data.get("triggers", [])
     except Exception as e:
         print(f"Error fetching whitelist: {e}")
