@@ -44,8 +44,11 @@ def split_trigger(trigger: str):
     return trigger, ""
 
 
-async def submit_drop_payload(interaction, payload):
-    """POST a completed drop submission to the drop server and report the result."""
+async def submit_drop_payload(interaction, payload, public_summary=None):
+    """POST a completed drop submission to the drop server and report the result.
+
+    The success message is posted publicly (so the channel sees the drop landed);
+    errors stay ephemeral to the person who submitted."""
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(os.getenv("DROP_SERVER_URL") + "/bot", json=payload) as response:
@@ -58,7 +61,8 @@ async def submit_drop_payload(interaction, payload):
                 print(f"Submission successful: {response.status}")
                 print(await response.text())
                 data = await response.json()
-                await interaction.followup.send(data["message"], ephemeral=True)
+                content = f"{public_summary}\n{data['message']}" if public_summary else data["message"]
+                await interaction.followup.send(content, ephemeral=False)
                 return
     except aiohttp.ClientConnectorError as e:
         print(str(e))
@@ -122,7 +126,13 @@ class TriggerSelectView(ui.View):
             "quantity": self.quantity,
             "attachment_url": self.meta["attachment_url"],
         }
-        await submit_drop_payload(interaction, payload)
+        item_label = f"{item_name} ({source})" if source else item_name
+        qty_label = f"{self.quantity}x " if self.quantity not in ("1", "") else ""
+        public_summary = (
+            f"📥 **{qty_label}{item_label}** submitted for **{self.meta['user']}** "
+            f"by {interaction.user.mention}"
+        )
+        await submit_drop_payload(interaction, payload, public_summary=public_summary)
 
 
 class DropSearchModal(ui.Modal):
