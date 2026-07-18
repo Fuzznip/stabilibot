@@ -71,22 +71,22 @@ async def submit_drop_payload(interaction, payload):
 
 class SearchAgainButton(ui.Button):
     """Re-opens the search modal, keeping the same screenshot and quantity."""
-    def __init__(self, bot, message, quantity):
+    def __init__(self, bot, meta, quantity):
         super().__init__(label="Search again", style=discord.ButtonStyle.secondary)
         self.bot = bot
-        self.message = message
+        self.meta = meta
         self.quantity = quantity
 
     async def callback(self, interaction):
-        await interaction.response.send_modal(DropSearchModal(self.bot, self.message, self.quantity))
+        await interaction.response.send_modal(DropSearchModal(self.bot, self.meta, self.quantity))
 
 
 class TriggerSelectView(ui.View):
     """Ephemeral dropdown of the triggers that matched the user's search."""
-    def __init__(self, bot, message, triggers, quantity):
+    def __init__(self, bot, meta, triggers, quantity):
         super().__init__(timeout=300)
         self.bot = bot
-        self.message = message
+        self.meta = meta
         self.quantity = quantity
 
         options = []
@@ -106,7 +106,7 @@ class TriggerSelectView(ui.View):
         )
         self.trigger_select.callback = self.trigger_selected
         self.add_item(self.trigger_select)
-        self.add_item(SearchAgainButton(bot, message, quantity))
+        self.add_item(SearchAgainButton(bot, meta, quantity))
 
     async def trigger_selected(self, interaction):
         await interaction.response.defer(ephemeral=True)
@@ -114,24 +114,26 @@ class TriggerSelectView(ui.View):
         item_name, source = split_trigger(trigger)
         payload = {
             "submission_type": "drop",
-            "timestamp": self.message.created_at.isoformat(),
-            "user": self.message.author.display_name,
-            "discord_id": str(self.message.author.id),
+            "timestamp": self.meta["timestamp"],
+            "user": self.meta["user"],
+            "discord_id": self.meta["discord_id"],
             "item_name": item_name,
             "source": source,
             "quantity": self.quantity,
-            "attachment_url": self.message.attachments[0].url,  # guaranteed exactly one attachment
+            "attachment_url": self.meta["attachment_url"],
         }
         await submit_drop_payload(interaction, payload)
 
 
 class DropSearchModal(ui.Modal):
     """Step 1: capture a search term + quantity. A modal (not autocomplete) so the
-    flow stays bound to the right-clicked screenshot message."""
-    def __init__(self, bot: commands.Bot, message: discord.Message, quantity_default: str = "1"):
+    flow stays bound to the right-clicked screenshot. `meta` is an immutable snapshot
+    of the screenshot's author/timestamp/attachment taken at command time, so the
+    submission doesn't depend on the (mutable, cache-updated) Message object later."""
+    def __init__(self, bot: commands.Bot, meta: dict, quantity_default: str = "1"):
         super().__init__(title="Submit Drop", timeout=None)
         self.bot = bot
-        self.message = message
+        self.meta = meta
 
         self.search_input = discord.ui.InputText(
             label="Search for the drop",
@@ -172,7 +174,7 @@ class DropSearchModal(ui.Modal):
         if not matches:
             await interaction.followup.send(
                 f"No triggers matched \"{query}\". Try a different search term.",
-                view=SearchAgainView(self.bot, self.message, quantity),
+                view=SearchAgainView(self.bot, self.meta, quantity),
                 ephemeral=True,
                 wait=True,  # required so the view binds to the message and its buttons fire
             )
@@ -180,7 +182,7 @@ class DropSearchModal(ui.Modal):
 
         total = len(matches)
         shown = matches[:MAX_SELECT_OPTIONS]
-        content = f"Select the drop you're submitting for **{self.message.author.display_name}**:"
+        content = f"Select the drop you're submitting for **{self.meta['user']}**:"
         if total > MAX_SELECT_OPTIONS:
             content += (
                 f"\n_Showing {MAX_SELECT_OPTIONS} of {total} matches "
@@ -189,7 +191,7 @@ class DropSearchModal(ui.Modal):
 
         await interaction.followup.send(
             content,
-            view=TriggerSelectView(self.bot, self.message, shown, quantity),
+            view=TriggerSelectView(self.bot, self.meta, shown, quantity),
             ephemeral=True,
             wait=True,  # required so the view binds to the message and the select fires
         )
@@ -197,9 +199,9 @@ class DropSearchModal(ui.Modal):
 
 class SearchAgainView(ui.View):
     """Shown when a search returns no matches — just a button to try again."""
-    def __init__(self, bot, message, quantity):
+    def __init__(self, bot, meta, quantity):
         super().__init__(timeout=300)
-        self.add_item(SearchAgainButton(bot, message, quantity))
+        self.add_item(SearchAgainButton(bot, meta, quantity))
 
 
 class Submit(commands.Cog):
@@ -216,8 +218,18 @@ class Submit(commands.Cog):
 
         # TODO: Check if the message has already been submitted
 
-        # Send the search modal; the whole flow stays tied to this screenshot message
-        await interaction.response.send_modal(DropSearchModal(self.bot, message))
+        # Snapshot everything we need now, while the attachment is known to exist. The
+        # Message object can be mutated later (e.g. auto-embed MESSAGE_UPDATE clears
+        # attachments in cache), so we don't rely on it past this point.
+        meta = {
+            "user": message.author.display_name,
+            "discord_id": str(message.author.id),
+            "timestamp": message.created_at.isoformat(),
+            "attachment_url": message.attachments[0].url,
+        }
+
+        # Send the search modal; the snapshot carries the screenshot through the flow
+        await interaction.response.send_modal(DropSearchModal(self.bot, meta))
 
 class KCSubmissionModal(ui.Modal):
     def __init__(self, bot: commands.Bot, interaction: discord.Interaction, message: discord.Message):
