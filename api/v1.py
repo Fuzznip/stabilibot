@@ -8,6 +8,8 @@ from pydantic import BaseModel
 import logging
 from typing import Optional, List
 from datetime import datetime
+from urllib.parse import urlparse
+import aiohttp
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -52,13 +54,57 @@ class ScheduledEventRequest(BaseModel):
     name: str
     start_time: datetime
     end_time: datetime
+    # A stage or voice channel to hold the event in; otherwise it's external
+    # and `location` is the text shown (default SCHEDULED_EVENT_LOCATION).
+    channel_id: Optional[int] = None
+    location: Optional[str] = None
+    # Cover photo. On update, None removes the current one.
+    image_url: Optional[str] = None
     token: str
 
 class TokenRequest(BaseModel):
     token: str
 
 # External events need a location and an end time, and need no voice channel.
-SCHEDULED_EVENT_LOCATION = "Old School RuneScape"
+SCHEDULED_EVENT_LOCATION = "Clan Hall"
+# Cover photos are only fetched from S3, where the site uploads them.
+COVER_IMAGE_HOST_SUFFIX = ".amazonaws.com"
+MAX_COVER_IMAGE_BYTES = 10 * 1024 * 1024
+
+
+class EventRequestError(Exception):
+    """A request the bot can't act on; the message goes back to the caller."""
+
+
+def _event_location(guild: discord.Guild, event_request: ScheduledEventRequest):
+    if event_request.channel_id is None:
+        return event_request.location or SCHEDULED_EVENT_LOCATION
+    channel = guild.get_channel(event_request.channel_id)
+    if not isinstance(channel, (discord.StageChannel, discord.VoiceChannel)):
+        raise EventRequestError(f"Channel {event_request.channel_id} is not a stage or voice channel in this server")
+    return channel
+
+
+async def _fetch_cover_image(url: str) -> bytes:
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or not (parsed.hostname or "").endswith(COVER_IMAGE_HOST_SUFFIX):
+        raise EventRequestError("Cover image must be an https S3 URL")
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15)) as session:
+        async with session.get(url) as resp:
+            if resp.status != 200:
+                raise EventRequestError(f"Couldn't download cover image ({resp.status})")
+            data = await resp.content.read(MAX_COVER_IMAGE_BYTES + 1)
+    if len(data) > MAX_COVER_IMAGE_BYTES:
+        raise EventRequestError("Cover image is larger than 10MB")
+    return data
+
+
+# Channel types offered as event locations, in the order the site lists them.
+LOCATION_CHANNEL_TYPES = (
+    ("stage", lambda guild: guild.stage_channels),
+    ("voice", lambda guild: guild.voice_channels),
+    ("text", lambda guild: guild.text_channels),
+)
 
 class V1(commands.Cog):
     def __init__(self, bot: discord.Bot):
@@ -466,6 +512,35 @@ class V1(commands.Cog):
                 response.status_code = 500
                 return {"error": f"Error sending DM: {str(e)}"}
 
+        @self.router.get("/channels")
+        async def list_channels(request: Request, response: Response, token: str = None):
+            """Stage, voice and text channels, for picking an event location."""
+            if token != os.getenv("API_TOKEN"):
+                logger.warning("Invalid token provided to list_channels endpoint")
+                response.status_code = 401
+                return {"error": "Invalid token"}
+
+            guild = self.bot.get_guild(int(os.getenv("GUILD_ID")))
+            if not guild:
+                logger.error("Guild not found")
+                response.status_code = 500
+                return {"error": "Guild not found"}
+
+            def sort_key(channel):
+                category = channel.category
+                return (category.position if category else -1, channel.position)
+
+            channels = []
+            for kind, get_channels in LOCATION_CHANNEL_TYPES:
+                for channel in sorted(get_channels(guild), key=sort_key):
+                    channels.append({
+                        "id": str(channel.id),
+                        "name": channel.name,
+                        "type": kind,
+                        "category": channel.category.name if channel.category else None,
+                    })
+            return {"channels": channels}
+
         @self.router.post("/scheduled-events")
         async def create_scheduled_event(request: Request, response: Response, event_request: ScheduledEventRequest):
             logger.info(f"Received request to create scheduled event: {event_request.name}")
@@ -482,14 +557,20 @@ class V1(commands.Cog):
                 return {"error": "Guild not found"}
 
             try:
-                event = await guild.create_scheduled_event(
-                    name=event_request.name,
-                    start_time=event_request.start_time,
-                    end_time=event_request.end_time,
-                    location=SCHEDULED_EVENT_LOCATION,
-                )
+                options = {
+                    "name": event_request.name,
+                    "start_time": event_request.start_time,
+                    "end_time": event_request.end_time,
+                    "location": _event_location(guild, event_request),
+                }
+                if event_request.image_url:
+                    options["image"] = await _fetch_cover_image(event_request.image_url)
+                event = await guild.create_scheduled_event(**options)
                 logger.info(f"Created scheduled event '{event.name}' with ID {event.id}")
                 return {"id": str(event.id)}
+            except EventRequestError as e:
+                response.status_code = 400
+                return {"error": str(e)}
             except discord.errors.Forbidden:
                 logger.error("Bot doesn't have permission to manage events")
                 response.status_code = 403
@@ -530,13 +611,17 @@ class V1(commands.Cog):
                 changes = {
                     "name": event_request.name,
                     "end_time": event_request.end_time,
-                    "location": SCHEDULED_EVENT_LOCATION,
+                    "location": _event_location(guild, event_request),
+                    "image": await _fetch_cover_image(event_request.image_url) if event_request.image_url else None,
                 }
                 # Discord rejects start-time changes once an event is live.
                 if event.status == discord.ScheduledEventStatus.scheduled:
                     changes["start_time"] = event_request.start_time
                 await event.edit(**changes)
                 return {"message": "Scheduled event updated", "id": str(event.id)}
+            except EventRequestError as e:
+                response.status_code = 400
+                return {"error": str(e)}
             except discord.errors.Forbidden:
                 logger.error("Bot doesn't have permission to manage events")
                 response.status_code = 403
