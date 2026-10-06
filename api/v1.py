@@ -7,6 +7,7 @@ from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel
 import logging
 from typing import Optional, List
+from datetime import datetime
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -46,6 +47,18 @@ class SendDMRequest(BaseModel):
     user_id: int
     message: str
     token: str
+
+class ScheduledEventRequest(BaseModel):
+    name: str
+    start_time: datetime
+    end_time: datetime
+    token: str
+
+class TokenRequest(BaseModel):
+    token: str
+
+# External events need a location and an end time, and need no voice channel.
+SCHEDULED_EVENT_LOCATION = "Old School RuneScape"
 
 class V1(commands.Cog):
     def __init__(self, bot: discord.Bot):
@@ -453,3 +466,112 @@ class V1(commands.Cog):
                 response.status_code = 500
                 return {"error": f"Error sending DM: {str(e)}"}
 
+        @self.router.post("/scheduled-events")
+        async def create_scheduled_event(request: Request, response: Response, event_request: ScheduledEventRequest):
+            logger.info(f"Received request to create scheduled event: {event_request.name}")
+
+            if event_request.token != os.getenv("API_TOKEN"):
+                logger.warning("Invalid token provided to create_scheduled_event endpoint")
+                response.status_code = 401
+                return {"error": "Invalid token"}
+
+            guild = self.bot.get_guild(int(os.getenv("GUILD_ID")))
+            if not guild:
+                logger.error("Guild not found")
+                response.status_code = 500
+                return {"error": "Guild not found"}
+
+            try:
+                event = await guild.create_scheduled_event(
+                    name=event_request.name,
+                    start_time=event_request.start_time,
+                    end_time=event_request.end_time,
+                    location=SCHEDULED_EVENT_LOCATION,
+                )
+                logger.info(f"Created scheduled event '{event.name}' with ID {event.id}")
+                return {"id": str(event.id)}
+            except discord.errors.Forbidden:
+                logger.error("Bot doesn't have permission to manage events")
+                response.status_code = 403
+                return {"error": "Bot is missing the Manage Events permission"}
+            except Exception as e:
+                logger.error(f"Error creating scheduled event: {str(e)}")
+                response.status_code = 500
+                return {"error": f"Error creating scheduled event: {str(e)}"}
+
+        @self.router.patch("/scheduled-events/{event_id}")
+        async def update_scheduled_event(request: Request, response: Response, event_id: int, event_request: ScheduledEventRequest):
+            logger.info(f"Received request to update scheduled event {event_id}")
+
+            if event_request.token != os.getenv("API_TOKEN"):
+                logger.warning("Invalid token provided to update_scheduled_event endpoint")
+                response.status_code = 401
+                return {"error": "Invalid token"}
+
+            # 500, not 404: the backend reads 404 as "event gone, recreate it".
+            guild = self.bot.get_guild(int(os.getenv("GUILD_ID")))
+            if not guild:
+                logger.error("Guild not found")
+                response.status_code = 500
+                return {"error": "Guild not found"}
+
+            try:
+                event = await guild.fetch_scheduled_event(event_id)
+            except discord.errors.NotFound:
+                response.status_code = 404
+                return {"error": "Scheduled event not found"}
+
+            # A finished event can't be edited; report it as gone so the backend recreates it.
+            if event.status in (discord.ScheduledEventStatus.completed, discord.ScheduledEventStatus.canceled):
+                response.status_code = 404
+                return {"error": "Scheduled event has ended"}
+
+            try:
+                changes = {
+                    "name": event_request.name,
+                    "end_time": event_request.end_time,
+                    "location": SCHEDULED_EVENT_LOCATION,
+                }
+                # Discord rejects start-time changes once an event is live.
+                if event.status == discord.ScheduledEventStatus.scheduled:
+                    changes["start_time"] = event_request.start_time
+                await event.edit(**changes)
+                return {"message": "Scheduled event updated", "id": str(event.id)}
+            except discord.errors.Forbidden:
+                logger.error("Bot doesn't have permission to manage events")
+                response.status_code = 403
+                return {"error": "Bot is missing the Manage Events permission"}
+            except Exception as e:
+                logger.error(f"Error updating scheduled event: {str(e)}")
+                response.status_code = 500
+                return {"error": f"Error updating scheduled event: {str(e)}"}
+
+        @self.router.delete("/scheduled-events/{event_id}")
+        async def delete_scheduled_event(request: Request, response: Response, event_id: int, delete_request: TokenRequest):
+            logger.info(f"Received request to delete scheduled event {event_id}")
+
+            if delete_request.token != os.getenv("API_TOKEN"):
+                logger.warning("Invalid token provided to delete_scheduled_event endpoint")
+                response.status_code = 401
+                return {"error": "Invalid token"}
+
+            guild = self.bot.get_guild(int(os.getenv("GUILD_ID")))
+            if not guild:
+                logger.error("Guild not found")
+                response.status_code = 500
+                return {"error": "Guild not found"}
+
+            try:
+                event = await guild.fetch_scheduled_event(event_id)
+                await event.delete()
+            except discord.errors.NotFound:
+                pass  # already gone, which is the outcome the caller wanted
+            except discord.errors.Forbidden:
+                logger.error("Bot doesn't have permission to manage events")
+                response.status_code = 403
+                return {"error": "Bot is missing the Manage Events permission"}
+            except Exception as e:
+                logger.error(f"Error deleting scheduled event: {str(e)}")
+                response.status_code = 500
+                return {"error": f"Error deleting scheduled event: {str(e)}"}
+            return {"message": "Scheduled event deleted"}
