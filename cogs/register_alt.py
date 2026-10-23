@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 load_dotenv()
 import os
 import requests
+from backend import BACKEND_HEADERS
 
 class RegisterAlt(commands.Cog):
     def __init__(self, bot):
@@ -20,7 +21,8 @@ class RegisterAlt(commands.Cog):
         discord_id = str(interaction.user.id)
         response = requests.post(
             f"{self.backend_url}/users/{discord_id}/add_alt",
-            json={"rsn": alt_name}
+            json={"rsn": alt_name},
+            headers=BACKEND_HEADERS,
         )
         
         if response.status_code in [200, 201]:
@@ -38,7 +40,8 @@ class RegisterAlt(commands.Cog):
         discord_id = str(interaction.user.id)
         response = requests.delete(
             f"{self.backend_url}/users/{discord_id}/remove_alt",
-            json={"rsn": alt_name}
+            json={"rsn": alt_name},
+            headers=BACKEND_HEADERS,
         )
         
         if response.status_code in [200, 201]:
@@ -55,7 +58,8 @@ class RegisterAlt(commands.Cog):
         # Make API call to list registered accounts
         discord_id = str(interaction.user.id)
         response = requests.get(
-            f"{self.backend_url}/users/{discord_id}/accounts"
+            f"{self.backend_url}/users/{discord_id}/accounts",
+            headers=BACKEND_HEADERS,
         )
         
         if response.status_code == 200:

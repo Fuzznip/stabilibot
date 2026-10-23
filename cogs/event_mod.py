@@ -6,6 +6,7 @@ import os
 import json
 import aiohttp
 import logging
+from backend import BACKEND_HEADERS
 
 class AddToTeamSelectView(discord.ui.View):
     def __init__(self, target_member, teams, cog, event_id):
@@ -625,7 +626,7 @@ class EventMod(commands.Cog):
         url = f"{self.backend_url}{endpoint}"
         
         try:
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(headers=BACKEND_HEADERS) as session:
                 if method == "GET":
                     async with session.get(url) as response:
                         if response.status in [200, 201]:

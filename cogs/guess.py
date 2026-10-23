@@ -8,6 +8,7 @@ import os
 
 import aiohttp
 import io
+from backend import BACKEND_HEADERS
 
 class GuessModal(ui.DesignerModal):
     def __init__(self, bot: commands.Bot, interaction: discord.Interaction):
@@ -60,7 +61,7 @@ class GuessModal(ui.DesignerModal):
 
         # Send the json payload to the /guess endpoint
         try:
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(headers=BACKEND_HEADERS) as session:
                 async with session.post(os.getenv("BACKEND_URL") + "/guess", json = payload) as response:
                     if response.status != 200:
                         print(response.status)

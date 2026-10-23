@@ -3,6 +3,7 @@ from discord.ext import commands, tasks
 import aiohttp
 import os
 from datetime import datetime, time, timezone, timedelta
+from backend import BACKEND_HEADERS
 
 class PostRiddles(commands.Cog):
     def __init__(self, bot):
@@ -25,7 +26,7 @@ class PostRiddles(commands.Cog):
         
         # Fetch riddles from backend
         try:
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(headers=BACKEND_HEADERS) as session:
                 async with session.get(os.getenv("BACKEND_URL") + "/riddles") as response:
                     if response.status != 200:
                         print(f"Error fetching riddles: {response.status} - {await response.text()}")

@@ -3,6 +3,7 @@ from discord.ext import commands, tasks
 import requests
 import os
 import asyncio
+from backend import BACKEND_HEADERS
 
 class UpdateNicknames(commands.Cog):
     def __init__(self, bot):
@@ -19,7 +20,7 @@ class UpdateNicknames(commands.Cog):
         # Fetch user data from the backend
         try:
             url = os.getenv("BACKEND_URL") + "/users"
-            response = requests.get(url)
+            response = requests.get(url, headers=BACKEND_HEADERS)
             if response.status_code != 200:
                 print(f"Error fetching user data: {response.status_code} - {response.text}")
                 return

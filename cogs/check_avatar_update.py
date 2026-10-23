@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 import os
 import requests
+from backend import BACKEND_HEADERS
 
 class CheckAvatarUpdate(commands.Cog):
     def __init__(self, bot):
@@ -13,6 +14,7 @@ class CheckAvatarUpdate(commands.Cog):
         if before.avatar != after.avatar:
             requests.put(
                 os.getenv("BACKEND_URL") + f"/users/{after.id}",
+                headers=BACKEND_HEADERS,
                 json={
                     "discord_avatar_url": after.avatar.url,
                 }

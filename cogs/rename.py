@@ -2,6 +2,7 @@ from discord.ext import commands
 import discord
 import requests
 import os
+from backend import BACKEND_HEADERS
 
 class Rename(commands.Cog):
     def __init__(self, bot):
@@ -37,7 +38,7 @@ class Rename(commands.Cog):
         try:
             url = f"{os.getenv('BACKEND_URL')}/users/{interaction.user.id}/rename"
             payload = {"runescape_name": new_name}
-            headers = {"Content-Type": "application/json"}
+            headers = {"Content-Type": "application/json", **BACKEND_HEADERS}
             response = requests.put(url, json=payload, headers=headers)
 
             if response.status_code == 200:
