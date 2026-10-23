@@ -8,6 +8,7 @@ import os
 import json
 
 import aiohttp
+from backend import BACKEND_HEADERS
 
 # Discord StringSelect menus have a hard cap of 25 options, so the search
 # results shown at once are limited to this. Users narrow further via "Search again".
@@ -22,7 +23,7 @@ async def fetch_drop_triggers():
     """
     url = os.getenv("BACKEND_URL") + "/events/whitelist"
     try:
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(headers=BACKEND_HEADERS) as session:
             async with session.get(url, headers={"Accept": "application/json"}) as response:
                 if response.status != 200:
                     print(f"Whitelist fetch failed: {response.status}")

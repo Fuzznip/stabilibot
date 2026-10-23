@@ -10,6 +10,7 @@ from typing import Dict, Any, Optional
 import logging
 import traceback
 from datetime import datetime
+from backend import BACKEND_HEADERS
 
 # Configure logging
 logging.basicConfig(
@@ -141,7 +142,7 @@ class EventUser(commands.Cog):
         
         try:
             start_time = datetime.now()
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(headers=BACKEND_HEADERS) as session:
                 if method == "GET":
                     # For GET requests, we don't send a Content-Type header since there's no body
                     async with session.get(url, headers={"Accept": "application/json"}) as response:
