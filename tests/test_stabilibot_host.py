@@ -12,7 +12,6 @@ import discord
 from discord.ext import tasks
 
 from trial_board_bot.bot import Config
-from trial_board_bot.store import Store
 
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -22,13 +21,13 @@ class StabilibotHostTests(unittest.IsolatedAsyncioTestCase):
         root=ROOT/'work/test-runs'
         root.mkdir(parents=True,exist_ok=True)
         with tempfile.TemporaryDirectory(dir=root) as temp:
-            cfg=Config(True,1,100,200,[300],[400],database=str(Path(temp)/'trials.sqlite3'))
+            cfg=Config(True,1,100,200,[300],[400])
             original=Path.cwd()
             sys.path.insert(0,str(ROOT))
             try:
                 os.chdir(temp)
                 with patch.dict(os.environ,{'GUILD_ID':'1','TOKEN':'offline-test-token',
-                    'TRIAL_BOARD_ENABLED':str(enabled).lower(),'API_TOKEN':'offline-test-key'}), \
+                    'TRIAL_BOARD_ENABLED':str(enabled).lower(),'API_TOKEN':'offline-test-key','BACKEND_URL':'https://example.com','BACKEND_API_KEY':'test-key','TRIAL_BOARD_API_KEY':'test-only'}), \
                     patch('dotenv.load_dotenv'),patch.object(discord.Bot,'run') as run, \
                     patch.object(tasks.Loop,'start') as start, \
                     patch('logging.basicConfig'),patch('logging.FileHandler',return_value=logging.NullHandler()), \
@@ -53,10 +52,10 @@ class StabilibotHostTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(bot.intents.message_content)
                 from api.v1 import V1
                 routes={route.path for route in V1(bot).router.routes}
-                self.assertIn('/trials/start',routes)
+                self.assertNotIn('/trials/start',routes)
                 self.assertIn('/{user_id}/roles/add',routes)
                 if enabled:
-                    self.assertTrue(bot.get_cog('TrialBoard').store.paused())
+                    self.assertFalse(hasattr(bot.get_cog('TrialBoard'),'store'))
                     bot.remove_cog('TrialBoard')
                 await bot.close()
                 return names
