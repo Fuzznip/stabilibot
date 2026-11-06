@@ -4,7 +4,6 @@ import discord
 from discord.ext import commands
 import os
 from fastapi import APIRouter, Request, Response
-from trial_board_bot.web import add_trial_routes
 from pydantic import BaseModel
 import logging
 from typing import Optional, List
@@ -111,7 +110,6 @@ class V1(commands.Cog):
     def __init__(self, bot: discord.Bot):
         self.bot = bot
         self.router = APIRouter()
-        add_trial_routes(self.router, self.bot)
 
         @self.router.get("/")
         def root(request: Request, token: str = None):
