@@ -6,7 +6,7 @@ import os
 import sys
 
 from .bot import Config, build_bot
-from .store import RuleError, Store
+from .client import RuleError, BackendClient
 
 
 def main():
@@ -25,8 +25,8 @@ def main():
         token=os.environ.get('TRIAL_BOT_TOKEN')
         if not token:
             raise RuleError('Set TRIAL_BOT_TOKEN in the hosting secret store. Never commit it.')
-        store=Store(cfg.database,shared_pool=cfg.shared_pool)
-        bot,runtime=build_bot(cfg,store)
+        client=BackendClient(cfg.guild_id)
+        bot,runtime=build_bot(cfg,client)
         async def run():
             if args.sync:
                 @bot.listen('on_ready')

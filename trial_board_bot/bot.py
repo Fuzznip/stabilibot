@@ -4,14 +4,13 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
 import logging
-from pathlib import Path
 import tomllib
 import uuid
 
 import discord
 from discord.ext import commands, tasks
 
-from .store import RuleError, Store, parse_windows
+from .client import BackendClient, BackendUnavailable, RuleError
 
 log = logging.getLogger(__name__)
 
@@ -24,10 +23,6 @@ class Config:
     staff_channel_id: int
     staff_role_ids: list[int]
     volunteer_role_ids: list[int]
-    database: str = 'private/trial-board.sqlite3'
-    shared_pool: bool = True
-    offer_limit: int = 3
-    trial_days: int = 14
 
     @classmethod
     def read(cls, path):
@@ -38,12 +33,6 @@ class Config:
             raise RuleError('Set real guild, channel and role IDs in your private config.')
         if cfg.queue_channel_id == cfg.staff_channel_id or set(cfg.staff_role_ids) & set(cfg.volunteer_role_ids):
             raise RuleError('Staff feedback must have a separate channel and staff roles.')
-        if not 1 <= cfg.offer_limit <= 5 or not 1 <= cfg.trial_days <= 30:
-            raise RuleError('offer_limit must be 1–5; trial_days must be 1–30.')
-        database=Path(cfg.database).resolve()
-        private_root=Path('private').resolve()
-        if database == private_root or not database.is_relative_to(private_root):
-            raise RuleError('Keep the database under private/ (outside Git).')
         return cfg
 
 
@@ -91,9 +80,9 @@ async def reply(interaction, text):
 
 
 class AvailabilityModal(discord.ui.Modal):
-    def __init__(self, runtime, trial=None):
+    def __init__(self, runtime, trial=None, revision=None):
         super().__init__(title='When can you pot?', timeout=600)
-        self.runtime, self.trial = runtime, trial
+        self.runtime, self.trial, self.revision = runtime, trial, revision
         self.zone = discord.ui.InputText(label='Timezone', placeholder='America/New_York', max_length=64)
         self.windows = discord.ui.InputText(
             label='Available windows (one per line)', style=discord.InputTextStyle.long,
@@ -103,12 +92,12 @@ class AvailabilityModal(discord.ui.Modal):
 
     async def callback(self, interaction):
         try:
+            await interaction.response.defer(ephemeral=True)
             await self.runtime.guard(interaction, volunteer=self.trial is None)
-            windows = parse_windows(self.windows.value, self.zone.value, self.runtime.store.now())
             if self.trial is None:
-                self.runtime.store.availability(interaction.user.id, windows, self.zone.value.strip(), True)
+                await self.runtime.client.call('availability', interaction.user, windows=self.windows.value, zone=self.zone.value)
             else:
-                self.runtime.store.applicant_availability(self.trial, interaction.user.id, windows, self.zone.value.strip())
+                await self.runtime.client.call('applicant_availability', interaction.user, number=self.trial, windows=self.windows.value, zone=self.zone.value, revision=self.revision)
             await reply(interaction, 'Availability saved. The bot will use these windows to find a time.')
         except RuleError as e:
             await reply(interaction, str(e))
@@ -117,7 +106,7 @@ class AvailabilityModal(discord.ui.Modal):
 class FeedbackModal(discord.ui.Modal):
     def __init__(self, runtime, trial):
         super().__init__(title='Private staff feedback', timeout=600)
-        self.runtime, self.trial = runtime, trial
+        self.runtime, self.trial, self.revision = runtime, trial, revision
         self.decision = discord.ui.InputText(label='recommend / more_time / concern', max_length=20)
         self.notes = discord.ui.InputText(label='Communication, effort, participation and fit',
                                         style=discord.InputTextStyle.long, min_length=5,max_length=1800)
@@ -126,9 +115,10 @@ class FeedbackModal(discord.ui.Modal):
 
     async def callback(self, interaction):
         try:
+            await interaction.response.defer(ephemeral=True)
             await self.runtime.guard(interaction, volunteer=True)
-            self.runtime.store.feedback(self.trial, interaction.user.id,
-                                        self.decision.value.strip().lower(),self.notes.value)
+            await self.runtime.client.call('feedback', interaction.user, number=self.trial,
+                recommendation=self.decision.value.strip().lower(), notes=self.notes.value)
             await reply(interaction, 'Saved for staff review. This does not admit or promote anyone.')
         except RuleError as e:
             await reply(interaction, str(e))
@@ -143,10 +133,11 @@ class SlotSelect(discord.ui.Select):
 
     async def callback(self, interaction):
         try:
+            await interaction.response.defer(ephemeral=True)
             await self.runtime.guard(interaction,volunteer=True)
             if interaction.user.id != self.user:
                 raise RuleError('Open your own slot picker.')
-            t = self.runtime.store.propose(self.trial,self.user,int(self.values[0]),self.revision)
+            t = await self.runtime.client.call('propose', interaction.user, number=self.trial, start=int(self.values[0]), revision=self.revision)
             await reply(interaction,f"Offered {stamp(t['start'])}. Waiting for the applicant to confirm.")
         except RuleError as e:
             await reply(interaction,str(e))
@@ -168,33 +159,37 @@ class TrialView(discord.ui.View):
 
     async def handle(self, interaction, action):
         try:
-            await self.runtime.guard(interaction,volunteer=action in ('pick','feedback'))
-            t = self.runtime.store.get(self.trial)
-            if action != 'feedback' and self.revision != t['revision']:
+            # Opening a modal must be the initial Discord response. No remote
+            # call is needed to show the form; the backend authorizes submission.
+            if action in ('availability','feedback'):
+                await self.runtime.guard(interaction)
+                if action == 'feedback':
+                    if not {r.id for r in interaction.user.roles} & set(self.runtime.cfg.volunteer_role_ids):
+                        raise RuleError('You need the volunteer role first.')
+                    await interaction.response.send_modal(FeedbackModal(self.runtime,self.trial))
+                else:
+                    await interaction.response.send_modal(AvailabilityModal(self.runtime,self.trial,self.revision))
+                return
+            await interaction.response.defer(ephemeral=True)
+            await self.runtime.guard(interaction,volunteer=action=='pick')
+            t = await self.runtime.client.call('get',interaction.user,number=self.trial)
+            if self.revision != t['revision']:
                 raise RuleError('This card is old. Use /trial status for the current controls.')
             if action == 'pick':
-                slots = self.runtime.store.available_slots(self.trial,interaction.user.id)
+                slots = await self.runtime.client.call('slots',interaction.user,number=self.trial)
                 if not slots:
                     raise RuleError('No matching slots, or you are at capacity. Update /board availability or ask staff.')
-                view = discord.ui.View(timeout=300)
+                view=discord.ui.View(timeout=300)
                 view.add_item(SlotSelect(self.runtime,self.trial,interaction.user.id,t['revision'],slots))
-                await interaction.response.send_message('Choose a time. It is booked only after the applicant confirms.',view=view,ephemeral=True)
-            elif action == 'feedback':
-                if t['owner'] != interaction.user.id or t['status'] != 'booked' or self.runtime.store.now() < t['start']:
-                    raise RuleError('Feedback is available to the assigned voucher after the session starts.')
-                await interaction.response.send_modal(FeedbackModal(self.runtime,self.trial))
-            elif action == 'availability':
-                if interaction.user.id != t['applicant'] or t['status'] not in ('open','availability'):
-                    raise RuleError('Only the applicant can set availability on an unbooked trial.')
-                await interaction.response.send_modal(AvailabilityModal(self.runtime,self.trial))
+                await interaction.followup.send('Choose a time. It is booked only after the applicant confirms.',view=view,ephemeral=True)
             elif action == 'confirm':
-                t = self.runtime.store.confirm(self.trial,interaction.user.id,self.revision)
+                t=await self.runtime.client.call('confirm',interaction.user,number=self.trial,revision=self.revision)
                 await reply(interaction,f"Confirmed for {stamp(t['start'])}.")
             elif action == 'reschedule':
-                self.runtime.store.reopen(self.trial,interaction.user.id,self.runtime.is_staff(interaction.user),self.revision)
+                await self.runtime.client.call('reopen',interaction.user,number=self.trial,revision=self.revision)
                 await reply(interaction,'Booking released. Please set fresh applicant availability.')
-        except RuleError as e:
-            await reply(interaction,str(e))
+        except RuleError as error:
+            await reply(interaction,str(error))
 
     async def on_error(self, error, item, interaction):
         # Never log interaction payloads, notes, tokens or applicant names.
@@ -203,8 +198,9 @@ class TrialView(discord.ui.View):
 
 
 class Runtime(commands.Cog, name='TrialBoard'):
-    def __init__(self, bot, cfg, store, standalone=False):
-        self.bot,self.cfg,self.store = bot,cfg,store
+    def __init__(self, bot, cfg, client, standalone=False):
+        self.bot,self.cfg,self.client = bot,cfg,client
+        self.shared_pool = True
         self.worker = str(uuid.uuid4())
         self.ready = False
         self.standalone = standalone
@@ -225,10 +221,11 @@ class Runtime(commands.Cog, name='TrialBoard'):
     def is_staff(self, member):
         return isinstance(member,discord.Member) and bool({r.id for r in member.roles} & set(self.cfg.staff_role_ids))
 
-    def is_volunteer(self, member):
-        v = self.store.volunteer(member.id)
-        return isinstance(member,discord.Member) and v and v['approved'] and bool(
-            {r.id for r in member.roles} & set(self.cfg.volunteer_role_ids))
+    async def is_volunteer(self, member):
+        if not isinstance(member,discord.Member) or not {r.id for r in member.roles} & set(self.cfg.volunteer_role_ids):
+            return False
+        v = await self.client.call('volunteer', member)
+        return bool(v and v['approved'])
 
     async def validate_channels(self):
         guild = self.bot.get_guild(self.cfg.guild_id)
@@ -251,7 +248,7 @@ class Runtime(commands.Cog, name='TrialBoard'):
         await self.validate_channels()
         if staff and not self.is_staff(interaction.user):
             raise RuleError('This action is for configured staff roles only.')
-        if volunteer and not self.is_volunteer(interaction.user):
+        if volunteer and not await self.is_volunteer(interaction.user):
             raise RuleError('You need staff approval and the volunteer Discord role first.')
 
     async def app_channel(self,t):
@@ -274,7 +271,7 @@ class Runtime(commands.Cog, name='TrialBoard'):
         embed = discord.Embed(title=f"Trial #{t['id']} · {t['status'].replace('_',' ')}",color=0xa32935)
         embed.add_field(name='Applicant',value=f"<@{t['applicant']}>")
         embed.add_field(name='Application',value=f"<#{t['channel']}>")
-        embed.add_field(name='Pool',value='Shared' if self.cfg.shared_pool else t['board'].title())
+        embed.add_field(name='Pool',value='Shared' if self.shared_pool else t['board'].title())
         embed.add_field(name='Voucher',value=f"<@{t['owner']}>" if t['owner'] else 'Unassigned')
         embed.add_field(name='Session length',value=f"{t['duration']//60} minutes")
         embed.add_field(name='Trial deadline',value=stamp(t['deadline']))
@@ -288,61 +285,76 @@ class Runtime(commands.Cog, name='TrialBoard'):
         embed.set_footer(text=f"Trial {t['id']} · staff decides admission")
         return embed
 
-    @commands.Cog.listener()
-    async def on_ready(self):
-        if self.ready:
-            return
-        try:
-            await self.validate_channels()
-        except RuleError as e:
-            log.error('Startup channel validation failed: %s',e)
-            self.store.pause(True,0)
-            if self.standalone:
-                await self.bot.close()
-            return
-        # Rehydrate controls from durable records; no chat/history scanning.
-        with self.store.db() as db:
-            rows = db.execute("SELECT trial,revision,kind FROM jobs WHERE status='sent' AND kind IN ('card','application')").fetchall()
-        for r in rows:
+    async def restore(self):
+        data = await self.client.call('bootstrap')
+        remote = data['config']
+        for name in ('guild_id','queue_channel_id','staff_channel_id'):
+            if remote[name] != getattr(self.cfg,name):
+                raise RuleError('Bot and backend trial configuration do not match.')
+        for name in ('staff_role_ids','volunteer_role_ids'):
+            if set(remote[name]) != set(getattr(self.cfg,name)):
+                raise RuleError('Bot and backend trial roles do not match.')
+        self.shared_pool = remote['shared_pool']
+        for r in data['views']:
             view=TrialView(self,r['trial'],r['revision'],'board' if r['kind']=='card' else 'application')
             self.controls.append(view)
             self.bot.add_view(view)
         self.ready=True
-        self.dispatch.start()
-        log.info('Trial bot ready; workflow paused=%s',self.store.paused())
 
-    @tasks.loop(seconds=30)
-    async def dispatch(self):
-        if not self.store.acquire_worker(self.worker):
+    @commands.Cog.listener()
+    async def on_ready(self):
+        if self.dispatch.is_running():
             return
         try:
             await self.validate_channels()
-            self.store.tick(self.cfg.offer_limit)
-            for _ in range(12):
-                if not self.store.acquire_worker(self.worker):
-                    break
-                job=self.store.next_job()
-                if job is None:
-                    break
+            await self.restore()
+        except RuleError as error:
+            log.error('Trial startup validation failed (%s). Worker will recheck.',type(error).__name__)
+            if not isinstance(error,BackendUnavailable):
                 try:
-                    message,channel=await asyncio.wait_for(self.deliver(job),timeout=60)
-                    self.store.finish_job(job,'sent',message,channel)
+                    await self.client.call('suspend')
                 except RuleError:
-                    self.store.finish_job(job,'failed',error='Permission or workflow validation failed')
-                except (discord.Forbidden,discord.NotFound):
-                    self.store.finish_job(job,'failed',error='Discord permission or destination failure')
-                except Exception as e:
-                    # Timeout could follow an accepted Discord send. Never send twice blindly.
-                    self.store.finish_job(job,'uncertain',error=type(e).__name__)
-                    log.error('Delivery %s needs reconciliation (%s)',job['id'],type(e).__name__)
-        except RuleError:
-            self.store.pause(True,0)
-            log.error('Channel permissions changed; trial workflow paused.')
-        except Exception as e:
-            log.error('Dispatcher failed (%s); will recheck state next cycle',type(e).__name__)
+                    pass
+        # Also retries startup after an unavailable backend; no host event is replaced.
+        self.dispatch.start()
 
-    async def deliver(self,job):
-        t=self.store.get(job['trial'])
+    @tasks.loop(seconds=30)
+    async def dispatch(self):
+        try:
+            await self.validate_channels()
+            if not self.ready:
+                await self.restore()
+            for _ in range(12):
+                context=await self.client.call('dispatch',worker=self.worker)
+                if context is None:
+                    break
+                job=context['job']
+                try:
+                    message,channel=await asyncio.wait_for(self.deliver(context),timeout=60)
+                except (RuleError,discord.Forbidden,discord.NotFound) as error:
+                    status='uncertain' if isinstance(error,BackendUnavailable) else 'failed'
+                    await self.client.call('ack',worker=self.worker,delivery=job['id'],claim_token=job['claim_token'],status=status)
+                except Exception as error:
+                    await self.client.call('ack',worker=self.worker,delivery=job['id'],claim_token=job['claim_token'],status='uncertain')
+                    log.error('Delivery %s needs reconciliation (%s)',job['id'],type(error).__name__)
+                else:
+                    # Keep acknowledgement outside the send try/except. A lost
+                    # ack must never turn a successful send into a second send.
+                    await self.client.call('ack',worker=self.worker,delivery=job['id'],claim_token=job['claim_token'],status='sent',message=message,channel=channel)
+        except BackendUnavailable:
+            log.error('Trial backend unavailable; no deliveries will be retried blindly.')
+        except RuleError:
+            self.ready=False
+            try:
+                await self.client.call('suspend')
+            except RuleError:
+                pass
+            log.error('Trial permission/configuration validation failed; workflow paused.')
+        except Exception as error:
+            log.error('Trial dispatcher failed (%s); will recheck next cycle',type(error).__name__)
+
+    async def deliver(self,context):
+        job,t=context['job'],context['trial']
         queue,staff=await self.validate_channels()
         data=json.loads(job['data'])
         mentions=[]
@@ -364,7 +376,7 @@ class Runtime(commands.Cog, name='TrialBoard'):
                     member=await queue.guild.fetch_member(user)
                 except discord.NotFound:
                     continue
-                if self.is_volunteer(member) and self.store.available_slots(t['id'],user):
+                if await self.is_volunteer(member) and await self.client.call('slots',member,number=t['id']):
                     members.append(user)
             mentions=members
             embed.description='A trial has a matching time window. Open the trial card and pick a time if you can help.'
@@ -372,7 +384,7 @@ class Runtime(commands.Cog, name='TrialBoard'):
                 return None,channel.id
         elif job['kind']=='feedback':
             channel=staff
-            feedback=self.store.feedback_record(data['feedback'])
+            feedback=context['feedback']
             embed=discord.Embed(title=f"Private feedback · trial #{t['id']}",color=0xa32935,
                                 description=safe(feedback['notes']))
             embed.add_field(name='Applicant',value=f"<@{t['applicant']}>")
@@ -416,7 +428,7 @@ class Runtime(commands.Cog, name='TrialBoard'):
         return msg.id,channel.id
 
 
-def attach_to_bot(bot, cfg, store, standalone=False):
+def attach_to_bot(bot, cfg, client, standalone=False):
     """Install on an existing bot without replacing events, intents or command sync.
 
     Commands are owned by the returned cog and removed by cog_unload. Local
@@ -425,29 +437,29 @@ def attach_to_bot(bot, cfg, store, standalone=False):
     names={c.name for c in [*bot.pending_application_commands,*bot.application_commands]}
     if names & {'trial','board'} or bot.get_cog('TrialBoard') is not None:
         raise RuleError('Trial commands or the TrialBoard cog are already installed.')
-    runtime=Runtime(bot,cfg,store,standalone=standalone)
+    runtime=Runtime(bot,cfg,client,standalone=standalone)
     trial=discord.SlashCommandGroup('trial','Arrange and review clan trials',guild_ids=[cfg.guild_id])
     board=discord.SlashCommandGroup('board','Manage trial volunteers',guild_ids=[cfg.guild_id])
 
     async def command_guard(ctx,staff=False,volunteer=False):
+        await ctx.defer(ephemeral=True)
         await runtime.guard(ctx.interaction,staff,volunteer)
 
     @trial.command(name='start',description='Staff: start a trial in an existing private application channel')
     async def start(ctx, applicant:discord.Member, application:discord.TextChannel,
                     route:discord.Option(str,choices=['normal','efficient'])='normal',minutes:int=60):
         await command_guard(ctx,staff=True)
-        await ctx.defer(ephemeral=True)
         if applicant.bot or application.id in (cfg.queue_channel_id,cfg.staff_channel_id):
             raise RuleError('Choose a human applicant and their separate application channel.')
         await runtime.app_channel({'channel':application.id,'applicant':applicant.id,'owner':None})
-        t=store.create(applicant.id,application.id,route,minutes,cfg.trial_days,ctx.author.id)
+        t=await client.call('create',ctx.author,applicant=applicant.id,channel=application.id,board=route,minutes=minutes,request_id=f'discord:{ctx.interaction.id}')
         await ctx.respond(f"Trial #{t['id']} opened. Availability request queued.",ephemeral=True)
 
     @trial.command(name='status',description='See an accessible trial and its current controls')
     async def status(ctx, number:int):
         await command_guard(ctx)
-        t=store.get(number)
-        is_board=runtime.is_volunteer(ctx.author) or runtime.is_staff(ctx.author)
+        t=await client.call('get',ctx.author,number=number)
+        is_board=runtime.is_staff(ctx.author) or await runtime.is_volunteer(ctx.author)
         if ctx.author.id not in (t['applicant'],t['owner']) and not is_board:
             raise RuleError('You cannot view this trial.')
         kind='application' if ctx.author.id==t['applicant'] else 'board'
@@ -457,22 +469,22 @@ def attach_to_bot(bot, cfg, store, standalone=False):
     @trial.command(name='list',description='Staff/volunteers: see current trial queue')
     async def listing(ctx):
         await command_guard(ctx)
-        if not runtime.is_staff(ctx.author) and not runtime.is_volunteer(ctx.author):
+        if not runtime.is_staff(ctx.author) and not await runtime.is_volunteer(ctx.author):
             raise RuleError('This queue is for approved volunteers and staff.')
-        rows=store.list()[:30]
+        rows=(await client.call('list',ctx.author))[:30]
         text='\n'.join(f"#{t['id']} · <@{t['applicant']}> · {t['status']}" for t in rows) or 'No open trials.'
         await ctx.respond(text+'\nUse /trial status for details.',ephemeral=True)
 
     @trial.command(name='reassign',description='Staff: release a booking and ask for fresh applicant availability')
     async def reassign(ctx,number:int):
         await command_guard(ctx,staff=True)
-        store.reopen(number,ctx.author.id,staff=True)
+        await client.call('reopen',ctx.author,number=number)
         await ctx.respond('Trial reopened. Fresh availability request queued.',ephemeral=True)
 
     @trial.command(name='close',description='Staff: record an outcome; does not change Discord roles')
     async def close(ctx,number:int,outcome:discord.Option(str,choices=['accepted','declined','withdrawn'])):
         await command_guard(ctx,staff=True)
-        store.close(number,ctx.author.id,outcome)
+        await client.call('close',ctx.author,number=number,outcome=outcome)
         await ctx.respond('Outcome recorded. No membership/rank roles changed.',ephemeral=True)
 
     @board.command(name='approve',description='Staff: approve a volunteer; they must opt in separately')
@@ -480,59 +492,60 @@ def attach_to_bot(bot, cfg, store, standalone=False):
         await command_guard(ctx,staff=True)
         if member.bot:
             raise RuleError('Choose a human volunteer.')
-        store.approve(member.id,route,capacity,ctx.author.id)
-        await ctx.respond('Approved in the bot. Staff must grant the configured volunteer role; the volunteer then uses /board availability to opt in.',ephemeral=True)
+        await client.call('approve',ctx.author,user=member.id,board=route,capacity=capacity)
+        await ctx.respond('Approved in the backend. Staff must grant the configured volunteer role; the volunteer then uses /board availability to opt in.',ephemeral=True)
 
     @board.command(name='remove',description='Staff: stop new assignments; existing bookings remain visible')
     async def remove(ctx,member:discord.Member):
         await command_guard(ctx,staff=True)
-        store.disable(member.id,ctx.author.id)
+        await client.call('disable',ctx.author,user=member.id)
         await ctx.respond('Removed from matching. Review /trial list and reassign any existing bookings.',ephemeral=True)
 
     @board.command(name='availability',description='Approved volunteers: opt in and set your next available dates')
     async def availability(ctx):
-        await command_guard(ctx,volunteer=True)
+        await runtime.guard(ctx.interaction)
+        if not {r.id for r in ctx.author.roles} & set(cfg.volunteer_role_ids):
+            raise RuleError('You need the volunteer role first.')
         await ctx.send_modal(AvailabilityModal(runtime))
 
     @board.command(name='away',description='Approved volunteers: pause new assignments')
     async def away(ctx):
         await command_guard(ctx,volunteer=True)
-        v=store.volunteer(ctx.author.id)
-        store.availability(ctx.author.id,json.loads(v['windows']),v['zone'],False)
+        await client.call('away',ctx.author)
         await ctx.respond('Paused new assignments. Existing bookings still need you or a staff reassignment.',ephemeral=True)
 
     @board.command(name='pause',description='Staff: pause assignments and outgoing workflow messages')
     async def pause(ctx):
         await command_guard(ctx,staff=True)
-        store.pause(True,ctx.author.id)
+        await client.call('pause',ctx.author)
         await ctx.respond('Trial coordination paused.',ephemeral=True)
 
     @board.command(name='resume',description='Staff: resume the approved trial-coordination workflow')
     async def resume(ctx):
         await command_guard(ctx,staff=True)
-        store.pause(False,ctx.author.id)
+        await client.call('resume',ctx.author)
         await ctx.respond('Trial coordination resumed.',ephemeral=True)
 
     @board.command(name='status',description='Staff: view pause state and unresolved deliveries')
     async def health(ctx):
         await command_guard(ctx,staff=True)
-        issues=store.issues()
-        text=f'Paused: {store.paused()} · Unresolved deliveries: {len(issues)}\n'
+        health=await client.call('health',ctx.author)
+        issues=health['issues']
+        text=f"Paused: {health['paused']} · Unresolved deliveries: {len(issues)}\n"
         text+='\n'.join(f"Delivery {j['id']} · trial {j['trial']} · {j['kind']} · {j['status']}" for j in issues[:25])
         await ctx.respond(text[:1900],ephemeral=True)
 
     @board.command(name='recover',description='Staff: reconcile a failed/uncertain delivery after inspecting Discord')
     async def recover(ctx,delivery:int,action:discord.Option(str,choices=['found','retry']),message_id:str=''):
         await command_guard(ctx,staff=True)
-        await ctx.defer(ephemeral=True)
-        job=store.job(delivery)
+        job=await client.call('job',ctx.author,delivery=delivery)
         if job['status'] not in ('failed','uncertain'):
             raise RuleError('Only unresolved deliveries can be reconciled.')
         if action=='retry':
-            store.finish_job(job,'pending')
+            await client.call('recover',ctx.author,delivery=delivery,status='pending')
             await ctx.respond('Queued again. This action assumes staff verified no message was delivered.',ephemeral=True)
             return
-        t=store.get(job['trial'])
+        t=await client.call('get',ctx.author,number=job['trial'])
         dest=cfg.queue_channel_id if job['kind'] in ('card','offer','owner') else cfg.staff_channel_id if job['kind'] in ('staff','feedback') else t['channel']
         channel=bot.get_channel(dest) or await bot.fetch_channel(dest)
         try:
@@ -542,7 +555,7 @@ def attach_to_bot(bot, cfg, store, standalone=False):
         marker=f"Trial {t['id']} · delivery {delivery}"
         if msg.author.id != bot.user.id or not any(e.footer.text==marker for e in msg.embeds):
             raise RuleError('That message is not the expected bot delivery.')
-        store.finish_job(job,'sent',msg.id,channel.id)
+        await client.call('recover',ctx.author,delivery=delivery,status='sent',message=msg.id,channel=channel.id)
         await ctx.respond('Receipt reconciled; no message resent.',ephemeral=True)
 
     async def trial_command_error(ctx,error):
@@ -566,10 +579,10 @@ def attach_to_bot(bot, cfg, store, standalone=False):
     return runtime
 
 
-def build_bot(cfg, store):
+def build_bot(cfg, client):
     # Standalone mode uses the same cog; no second implementation to maintain.
     intents=discord.Intents.none()
     intents.guilds=True
     bot=discord.Bot(intents=intents,auto_sync_commands=False,
                     allowed_mentions=discord.AllowedMentions.none())
-    return bot,attach_to_bot(bot,cfg,store,standalone=True)
+    return bot,attach_to_bot(bot,cfg,client,standalone=True)

@@ -13,7 +13,7 @@ def load_trial_board(bot):
     if existing is not None:
         return existing
     from .bot import Config, attach_to_bot
-    from .store import Store
+    from .client import BackendClient
     try:
         cfg=Config.read(os.getenv('TRIAL_BOARD_CONFIG','private/trial-board.toml'))
         if not cfg.enabled:
@@ -21,7 +21,7 @@ def load_trial_board(bot):
             return None
         if cfg.guild_id != int(os.getenv('GUILD_ID','0')):
             raise ValueError('Trial configuration must use the existing Stabilibot guild.')
-        return attach_to_bot(bot,cfg,Store(cfg.database,shared_pool=cfg.shared_pool))
+        return attach_to_bot(bot,cfg,BackendClient(cfg.guild_id))
     except Exception as error:
         # A trial config problem must not take down unrelated clan functions.
         # Do not log private configuration values or exception payloads.

@@ -1,1 +1,1 @@
-"""Stability's standalone trial coordination bot. No Discord access on import."""
+"""Discord interface to the backend-owned trial board. No I/O on import."""
