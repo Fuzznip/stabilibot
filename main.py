@@ -28,6 +28,7 @@ from cogs.event_mod import EventMod
 from cogs.event_user import EventUser
 from cogs.register_alt import RegisterAlt
 from cogs.guess import Guess
+from cogs.trial_board import setup as setup_trial_board
 
 class Stabilibot(commands.Bot):
   def __init__(self):
@@ -61,5 +62,6 @@ bot.add_cog(EventMod(bot))
 bot.add_cog(EventUser(bot))
 bot.add_cog(RegisterAlt(bot))
 bot.add_cog(Guess(bot))
+setup_trial_board(bot)
 
 bot.run(os.getenv("TOKEN"))

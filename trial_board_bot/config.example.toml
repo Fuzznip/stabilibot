@@ -1,0 +1,10 @@
+# Copy to private/trial-board.toml. IDs below are deliberately unset.
+enabled = false
+guild_id = 0
+queue_channel_id = 0
+staff_channel_id = 0
+staff_role_ids = [0]
+volunteer_role_ids = [0]
+# Trial data, matching, reminders and receipts live in stabilisite-backend.
+# BACKEND_URL, BACKEND_API_KEY and TRIAL_BOARD_API_KEY go in the environment.
+# Use the same guild/channel/role IDs as the backend's TRIAL_BOARD_* settings.
