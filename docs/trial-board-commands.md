@@ -1,7 +1,8 @@
 # Trial board command reference
 
 These are the 13 commands added by the trial-board update. Existing Stabilibot
-commands are outside this reference. The feature is not deployed or enabled.
+commands are outside this reference. The paired backend owns storage and authorization. Neither feature is deployed or enabled.
+The backend must be reachable; lost HTTP responses are not blindly retried.
 
 Examples use placeholder members/channels and trial number `12`. Select the real
 member/channel through Discord's command options; replace `12` with the number
@@ -27,7 +28,7 @@ already in-flight Discord send may finish.
 
 ### `/board approve`
 
-Approve a volunteer in the bot, or update an existing volunteer's route/capacity.
+Approve a volunteer in the backend, or update an existing volunteer's route/capacity.
 
 - `member` — required; the person being approved, not a bot account.
 - `route` — optional; `normal` (default) or `efficient`.
@@ -44,7 +45,7 @@ matching. It does not impose raid qualifications or calculate eligibility.
 
 ### `/board remove`
 
-Stop a volunteer receiving new assignments and revoke their bot approval.
+Stop a volunteer receiving new assignments and revoke their backend approval.
 
 - `member` — required; the volunteer to remove.
 
@@ -68,7 +69,7 @@ Example: `/trial start applicant:@Applicant application:#application-example rou
 
 The applicant must be able to view the channel. It cannot be the shared queue or
 staff feedback channel. Only one open trial is allowed per applicant. The planning
-deadline uses the configured `trial_days` (default 14); reaching it alerts staff
+deadline uses the backend `TRIAL_BOARD_TRIAL_DAYS` (default 14); reaching it alerts staff
 and never automatically decides admission.
 
 ### `/trial reassign`

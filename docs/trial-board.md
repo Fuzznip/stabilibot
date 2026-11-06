@@ -1,179 +1,138 @@
-# Trial coordination in Stabilibot
+# Trial coordination: backend owns the workflow
 
-Prepared November 4, 2026 against upstream commit
-`f61481998cd11bec3cd425de3ae854af279fa649`. This update has not been deployed.
-It uses Stabilibot's existing Pycord 2.7.1, bot account, `TOKEN`, `GUILD_ID`
-and FastAPI server. No new production dependencies or Discord application are needed.
+This update is paired with `Fuzznip/stabilisite-backend`. The backend stores all
+trial records in its existing PostgreSQL database. Stabilibot is the Discord UI
+and delivery transport: commands, modals, embeds, buttons and permission checks.
+There is no local trial SQLite database and no trial API on the bot's API server.
+Existing host commands, API routes, handlers, intents and cron jobs are preserved.
+Both services are disabled by default; the backend migration starts paused.
 
-The feature is disabled by default. Existing commands, event handlers, intents,
-API routes and scheduled jobs remain in place. Loading the trial cog adds only
-`/trial` and `/board`. A configuration failure skips the cog; a channel-access
-failure pauses its workflow without shutting down the rest of Stabilibot.
+## What lives where
 
-## Workflow
-
-1. Staff grant the private volunteer role and run `/board approve` for volunteers.
-   Volunteers opt in through `/board availability`, supplying dated windows and
-   a timezone. Approval alone never opts someone in; `/board away` stops new offers.
-2. Staff start a trial with `/trial start`, selecting an applicant and their
-   existing private application channel. Alternatively the website backend can
-   explicitly hand off an accepted application through the API described below.
-3. The applicant supplies 2–3 availability windows using a button in their channel.
-4. The bot offers it to up to three available volunteers, favouring lower current
-   workload and people offered trials less recently. Approved volunteers can also
-   claim compatible times from the private queue.
-5. A volunteer proposes a time; the applicant confirms it. Conflicting bookings
-   and volunteer capacity are enforced transactionally. Unconfirmed reservations
-   expire within 24 hours or five minutes before the session, whichever is sooner.
-6. The bot confirms and reminds each participant in their respective channels.
-   They arrange the actual game/voice group themselves.
-7. The assigned volunteer supplies feedback after the scheduled start. Feedback
-   (`recommend`, `more_time`, `concern` plus a note) goes to staff only.
-8. Staff record an outcome through `/trial close`. No Discord roles, ranks or
-   membership are changed automatically.
-
-`shared_pool=true` uses one general volunteer pool for normal and efficient trials.
-These are general categories, with no raid-specific qualifications. Separate routing
-can be enabled later: efficient volunteers cover either route; normal volunteers
-cover normal trials only. No rank, KC, SECS or tenure thresholds are introduced.
-The source contains no real applicant data or seeded volunteer roster.
-
-## Configuration and activation
-
-Keep this disabled until the owner approves the concrete channels, message
-templates and reminder cadence. This update does not authorize posting or DMing.
-The bot sends no volunteer invitation DMs and no public recruiting messages.
-
-1. Keep the existing production `TOKEN` and `GUILD_ID` in the host's secret store.
-2. Copy `trial_board_bot/config.example.toml` to `private/trial-board.toml`.
-   Set the real IDs and `guild_id` to the same server as `GUILD_ID`.
-3. Configure separate **private text channels** for the volunteer queue and staff
-   feedback. Deny @everyone View Channel. Allow only staff, approved volunteers
-   and Stabilibot in the queue; staff and Stabilibot in the feedback channel.
-   Discord administrators inherently retain access.
-4. Existing application channels must be private to the applicant, staff and bot
-   (plus an assigned volunteer if staff intentionally grants access). Other
-   non-admin roles/member overrides fail validation. The bot never edits permissions.
-5. Give Stabilibot View Channel, Send Messages, Embed Links and Read Message History
-   in these channels. This feature requires no additional privileged intents,
-   Administrator, Manage Roles or Manage Channels permissions.
-6. Keep SQLite under `private/` on a persistent local volume; restrict OS access
-   and take private backups using SQLite's backup API or including WAL files.
-   Never commit or upload the database, tokens, transcripts or feedback.
-7. After approval, set `enabled=true` in the TOML and `TRIAL_BOARD_ENABLED=true`
-   in the host environment. Optional `TRIAL_BOARD_CONFIG` changes the config path.
-   Start Stabilibot through the existing `python main.py` process. Its normal
-   command-sync behaviour registers the two new guild-scoped command groups.
-   Do not run the standalone `trial_board_bot` entry point alongside it.
-8. The database starts **paused**. Inspect `/board status`, complete the private
-   acceptance test below, then use `/board resume` for the approved workflow.
-
-Config defaults: shared pool, three initial targeted offers, 60-minute sessions,
-14-day planning deadline and capacity two per volunteer. Staff can select 30–240
-minutes and volunteer capacity 1–5. Deadlines never automatically reject anyone.
-
-Use one always-on Stabilibot process for this database. A worker lease prevents
-competing trial dispatchers, but ephemeral disks/sleeping hosts are unsuitable.
-`/board pause` stops new actions and outgoing jobs; an in-flight send may finish.
-To disable entirely, set `TRIAL_BOARD_ENABLED=false` and restart. This does not
-delete trial data. Normal host sync may remove the now-absent trial commands.
-
-## Availability and commands
-
-See the [full command reference](trial-board-commands.md) for every command's
-permissions, required/optional options, defaults, examples and button behaviour.
-
-Use an IANA timezone such as `America/New_York`, `Europe/London` or `UTC`.
-Each line supplies both dates:
-
-```text
-2026-11-08 18:00 / 2026-11-08 21:00
-2026-11-09 19:00 / 2026-11-09 22:00
-```
-
-Windows must be at least five minutes away, within 21 days, non-overlapping and
-at most 12 hours each. Supply 1–5 dated windows; availability is not recurring.
-The slot picker labels UTC; Discord booking cards display local timestamps.
-Ambiguous DST times require an explicit offset; nonexistent times are rejected.
-
-| Command | Access and purpose |
+| Backend | Stabilibot |
 |---|---|
-| `/board approve`, `/board remove` | Staff manage approval/capacity; existing bookings need reassignment when removing someone |
-| `/board availability`, `/board away` | Approved volunteers opt in/set availability or stop new assignments |
-| `/board status`, `/board pause`, `/board resume` | Staff inspect and control the workflow |
-| `/board recover` | Staff reconcile failed/uncertain deliveries after inspecting the expected channel |
-| `/trial start`, `/trial reassign`, `/trial close` | Staff create, reopen or record an outcome |
-| `/trial list` | Staff/approved volunteers see the queue |
-| `/trial status` | Authorised participants inspect a trial and its current controls |
+| Volunteer approval and availability; timezone/DST validation | Reads the actual Discord member/roles for each interaction |
+| Trials, matching, capacity/overlap rules, proposal expiry and outcomes | Renders commands, forms, cards and private replies |
+| Reminder scheduling, durable outbox, leases, receipts and audit | Polls for a delivery, checks channel permissions, sends it, acknowledges it |
+| Feedback records; authorized participant/staff access | Sends feedback only to the configured staff channel |
+| Durable records identifying persistent buttons | Re-registers button handlers from backend records on restart |
 
-Buttons handle applicant availability/confirmation/rescheduling, volunteer claims
-and private feedback. Role and actor checks apply to buttons and commands.
+Database rules and role/participant checks run on the backend even when the bot
+has already checked them. The service credential is server-only; actor IDs/roles
+are assertions made by the trusted bot, never input accepted from browser clients.
+No automatic admission, rank changes or volunteer invitation DMs are introduced.
+Normal/efficient are general categories; shared matching is the default. No raid,
+SECS, rank or tenure requirements are added.
 
-## Website handoff
+## Configure both services
 
-This repository has no website acceptance handler to modify. The website backend
-must call the new route **after staff accept an application for a trial**; until
-that separate change, `/trial start` provides the complete manual entry route.
-Generic role/channel API calls do not automatically start trials.
+1. Deploy the paired backend code and apply its `022_add_trial_board` migration
+   using the backend's normal `flask db upgrade` process. Do not run migrations on
+   a production database while merely testing. Backend setup: see its
+   `docs/trial-board.md`.
+2. Set the backend's `TRIAL_BOARD_GUILD_ID`, `TRIAL_BOARD_QUEUE_CHANNEL_ID`,
+   `TRIAL_BOARD_STAFF_CHANNEL_ID`, `TRIAL_BOARD_STAFF_ROLE_IDS` and
+   `TRIAL_BOARD_VOLUNTEER_ROLE_IDS`. Role lists are comma-separated. Staff and
+   volunteer role lists must be disjoint, even though a person may hold both roles.
+3. Copy `trial_board_bot/config.example.toml` to `private/trial-board.toml` in the
+   bot working directory. Fill the same guild/channel/role IDs. The bot's existing
+   `GUILD_ID` must match. The backend is authoritative: a mismatch stops delivery.
+4. Set the bot's existing `BACKEND_URL` and `BACKEND_API_KEY`. The backend's existing
+   `API_KEYS` list must accept that bot key. Set a separate `TRIAL_BOARD_API_KEY` in
+   **both** services' secret environments. Never commit keys, configs, trial data
+   or feedback, or put these credentials in website JavaScript. HTTPS is required;
+   plain HTTP is accepted by the bot only for localhost tests. Redirects are refused.
+5. Use separate private text channels for the volunteer queue and staff feedback.
+   Deny @everyone View Channel. Queue access: configured staff/volunteer roles and
+   Stabilibot. Feedback: configured staff roles and Stabilibot only. Administrators
+   inherently retain access. Existing application channels must be private to the
+   applicant, staff, bot and an intentionally assigned volunteer. Unrelated role
+   access or member overrides fail closed. The bot never changes permissions.
+6. Stabilibot needs View Channel, Send Messages, Embed Links and Read Message
+   History in those channels. No extra privileged intent, Administrator, Manage
+   Roles or Manage Channels is needed by this feature.
+7. After approving a private test, set backend `TRIAL_BOARD_ENABLED=true`, bot
+   `TRIAL_BOARD_ENABLED=true` and TOML `enabled=true`. Start the existing bot with
+   `python main.py`. Do not also run the standalone entry point with the same bot.
+8. Check `/board status`. The backend starts paused. Once the test participants,
+   channels, messages and reminder cadence are approved, use `/board resume`.
 
-The existing API server adds `POST /trials/start`, using the existing `API_TOKEN`
-body-token convention. Call from a trusted backend over HTTPS/private transport;
-never put this token in browser JavaScript. Configure proxy/APM logging not to
-capture request bodies. Use the existing server URL, without adding a `/v1` prefix.
+The earlier SQLite-era config is obsolete: remove `database`, `shared_pool`,
+`offer_limit` and `trial_days` from the bot TOML. The backend environment now owns
+`TRIAL_BOARD_SHARED_POOL` (true), `TRIAL_BOARD_OFFER_LIMIT` (3), and
+`TRIAL_BOARD_TRIAL_DAYS` (14). This is a predeployment refactor; no private SQLite
+records are silently copied or discarded. If someone has already accumulated live
+SQLite data, pause and plan an explicit, backed-up migration before switching.
 
-```json
-{
-  "token": "<existing server-side API_TOKEN>",
-  "request_id": "application:123:accepted-trial:v1",
-  "applicant_id": 123456789012345678,
-  "application_channel_id": 234567890123456789,
-  "route": "normal",
-  "minutes": 60
-}
-```
+## Workflow and commands
 
-Use a stable unique request ID per accepted application, persisted by the website.
-The first successful call returns HTTP 201 with `trial_id`, `status`, `replayed=false`;
-a repeat returns 200 and the same trial (`replayed=true`), even after it closes.
-Reusing an ID with a different payload or invalid channel access returns 409.
-Invalid/missing configured API credentials return 401; invalid fields return 422.
-Disabled, paused, not-ready or unavailable Discord access returns 503. Retry network
-errors/503 with backoff and the **same** request ID; investigate 401/409/422 instead.
-The website must retain unsuccessful handoffs for retry/staff attention.
+Staff grant the volunteer Discord role and run `/board approve`. Volunteers opt
+in separately with `/board availability`, giving 1–5 dated windows and an IANA
+timezone. `/board away` stops new offers while preserving existing bookings.
 
-## Delivery and recovery
+Staff run `/trial start` with a human applicant and their private application
+channel. The applicant supplies 2–3 suitable windows. The backend offers the trial
+to up to three compatible volunteers, favouring lower workload and less recently
+offered volunteers. A volunteer picks a time and the applicant confirms it.
+Reservations count towards capacity and expire within 24 hours or five minutes
+before the session. Cross-trial overlaps are blocked under a PostgreSQL row lock.
 
-Notifications include the initial applicant availability request, targeted volunteer
-offers, proposals/bookings, and reminders approximately one day and one hour before
-the session. If first seen within the last hour, only the hour reminder is sent.
-Staff-only alerts flag missing availability/unclaimed trials after 24 hours, missing
-feedback an hour after session end and trial deadlines, once per trial revision.
-Outcomes are not automatically announced to applicants.
+A volunteer submits short private feedback after the scheduled start. Staff record
+an outcome with `/trial close`; the feature does not change admission/rank roles.
+See [all 13 commands and buttons](trial-board-commands.md).
 
-SQLite stores the workflow and an outbox; buttons survive restarts. Permission
-errors halt delivery. Ambiguous sends become `uncertain` and block later jobs for
-that trial; they are never blindly resent to another channel. Inspect the expected
-channel for embed footer `Trial N · delivery J`, then use `/board recover` with
-`action:found` and its message ID, or `action:retry` only after verifying absence.
-Logs contain exception types/delivery IDs, not feedback or interaction payloads.
+The backend endpoint is `POST /trial-board/actions`. The bot passes the real
+Discord actor and current role IDs; server-side checks enforce staff, volunteer
+and participant scope. The old bot `POST /trials/start` route is removed. Existing
+website application-acceptance behavior is unchanged. `/trial start` is the full
+manual entry route; a future website integration can call the backend's domain
+service directly once an accepted application is explicitly associated with its
+private Discord channel. No webhook back into the bot or website frontend change
+is required for this manual test.
 
-## Offline verification and private acceptance test
+## Notifications, outages and restart
 
-Use Python 3.12 and a clean virtual environment. Production requirements stay unchanged:
+The bot polls every 30 seconds; backend code performs matching, expiry and reminder
+calculations. Notifications include availability requests, targeted offers,
+proposals/bookings, approximately one-day and one-hour reminders, and staff alerts
+for stalled trials, deadlines and missing feedback. Deadlines do not reject people.
+`/board pause` stops new actions and outgoing jobs; an in-flight send may finish.
+Disable with the feature environment switches and restart; data stays in Postgres.
+
+Only one Discord delivery worker holds the backend lease. Claimed jobs have unique
+tokens; stale acknowledgements are rejected. Failed/ambiguous deliveries hold later
+jobs for that trial. Lost claims expire to `uncertain`, including when the same bot
+stays alive. Lost receipt responses do not trigger another Discord send. Inspect
+the expected channel for footer `Trial N · delivery J`, then use `/board recover`
+with a verified message ID or an explicit retry after verifying absence.
+
+Backend outages fail closed. The transport retries startup after the backend
+recovers, rehydrates persistent buttons from durable backend receipts, and never
+retries a mutating HTTP request blindly. Feedback is not cached on disk by the bot.
+Keep normal PostgreSQL backups; no new private bot database volume is needed.
+
+## Test before enabling for the clan
+
+Use Python 3.12 and an isolated environment in each repository.
 
 ```sh
+# Stabilibot
 python -m pip install -r requirements.txt
-python -m pip install httpx==0.28.1
 python -m unittest discover -s tests -v
 python -m trial_board_bot.demo
 ```
 
-httpx is only needed for offline ASGI endpoint tests. Tests stub Discord login,
-existing cron tasks and the API listener. They verify the real host with the
-feature both disabled and enabled, including preservation of existing commands.
+Bot tests cover real host loading enabled/disabled, preserved commands/handlers,
+persistent controls, HTTP credentials, timeout handling, staff-only feedback and
+receipt loss. The demo is a synthetic transport demonstration, not a live trial.
 
-Before production use, obtain approval for a private test with consenting staff
-accounts. Verify unauthorised access is denied; approve/opt in a volunteer; create
-a synthetic application; add overlap; propose/confirm; reschedule; submit feedback
-and verify staff-only visibility; restart and test pause and permission failure.
-Offline tests do not replace this real Discord acceptance test.
+Run the paired backend's tests against an isolated PostgreSQL `*_test` database
+(never production), including booking races, migration upgrade/downgrade, access
+checks and worker takeover. See that repository's setup instructions.
+
+For the private Discord acceptance test: verify unauthorized actors cannot act;
+approve and opt in a consenting volunteer; start a synthetic trial; set overlapping
+windows; propose and confirm; test conflicts/rescheduling; submit feedback and
+verify staff-only visibility; restart both services and use existing buttons;
+simulate an unavailable backend and changed channel permissions; test pause and
+receipt reconciliation. Offline tests do not replace this private live check.
