@@ -1,0 +1,11 @@
+# Copy to private/trial-board.toml. IDs below are deliberately unset.
+enabled = false
+guild_id = 0
+queue_channel_id = 0
+staff_channel_id = 0
+staff_role_ids = [0]
+volunteer_role_ids = [0]
+database = "private/trial-board.sqlite3"
+shared_pool = true
+offer_limit = 3
+trial_days = 14
